@@ -36,6 +36,9 @@ android {
 }
 
 dependencies {
+    implementation("androidx.emoji2:emoji2:1.5.0")
+    implementation("androidx.emoji2:emoji2-bundled:1.5.0")
+    implementation("androidx.emoji2:emoji2-views:1.5.0")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
