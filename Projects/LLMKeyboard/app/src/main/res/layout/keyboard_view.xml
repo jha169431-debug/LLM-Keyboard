@@ -7,6 +7,62 @@
     android:padding="4dp"
     android:background="#101114">
 
+    <!-- Suggestion strip -->
+    <LinearLayout
+        android:id="@+id/suggestion_strip"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:orientation="horizontal"
+        android:background="#101114"
+        android:paddingBottom="2dp">
+
+        <TextView
+            android:id="@+id/suggestion_1"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text=""
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="#25282D" />
+
+        <TextView
+            android:id="@+id/suggestion_2"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text=""
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="#25282D" />
+
+        <TextView
+            android:id="@+id/suggestion_3"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text=""
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="#25282D" />
+
+    </LinearLayout>
+
     <!-- Number row -->
     <LinearLayout
         android:layout_width="match_parent"
