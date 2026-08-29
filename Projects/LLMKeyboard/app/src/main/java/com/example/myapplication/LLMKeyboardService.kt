@@ -1,4 +1,5 @@
 package com.example.myapplication
+
 import android.graphics.Color
 import android.inputmethodservice.InputMethodService
 import android.util.Log
@@ -7,101 +8,853 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.GridLayout
 import android.widget.ImageButton
-import android.widget.ImageView
-
-
-
+import android.widget.LinearLayout
+import java.io.File
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class LLMKeyboardService : InputMethodService() {
 
     companion object {
         private const val TAG = "LLMKeyboard"
+
+        // Wait after typing stops before requesting a prediction.
+        private const val PREDICTION_DELAY_MS = 650L
+
+        // Maximum text before cursor sent to Qwen.
+        private const val CONTEXT_LENGTH = 256
     }
 
     private var isShifted = false
 
-    override fun onCreateInputView(): View {
-        Log.d(TAG, "onCreateInputView() called")
+    // =========================================================
+    // LLM STATE
+    // =========================================================
 
-        val view = layoutInflater.inflate(
-            R.layout.keyboard_view,
-            null
+    private val llmScope =
+        CoroutineScope(
+            SupervisorJob() + Dispatchers.Default
         )
 
-        setupKeys(view)
+    private var keyboardLlm: KeyboardLlm? = null
 
-        Log.d(TAG, "Keyboard view created successfully")
+    @Volatile
+    private var llmReady = false
 
-        return view
+    private var llmInitStarted = false
+
+    // =========================================================
+    // PREDICTION PIPELINE
+    // =========================================================
+
+    private data class PredictionRequest(
+        val context: String,
+        val generation: Long
+    )
+
+    /*
+     * Only this debounce job gets cancelled while typing.
+     * Running Qwen inference is NEVER cancelled by new keypresses.
+     */
+    private var debounceJob: Job? = null
+
+    /*
+     * One persistent worker owns Qwen inference.
+     */
+    private var predictionWorkerJob: Job? = null
+
+    /*
+     * CONFLATED = while Qwen is busy, retain only the newest request.
+     */
+    private val predictionRequests =
+        Channel<PredictionRequest>(
+            capacity = Channel.CONFLATED
+        )
+
+    /*
+     * Every text change increments this.
+     *
+     * When an old inference finishes, its generation is compared
+     * with the latest generation. Old results are discarded.
+     */
+    private var predictionGeneration = 0L
+
+    // =========================================================
+    // SUGGESTION BAR
+    // =========================================================
+
+    private var suggestionButtons:
+            List<Button> = emptyList()
+
+    // =========================================================
+    // CREATE KEYBOARD
+    // =========================================================
+
+    override fun onCreateInputView(): View {
+
+        Log.d(
+            TAG,
+            "onCreateInputView() called"
+        )
+
+        val keyboardView =
+            layoutInflater.inflate(
+                R.layout.keyboard_view,
+                null
+            )
+
+        setupKeys(
+            keyboardView
+        )
+
+        /*
+         * Wrap existing keyboard:
+         *
+         * ┌──────────────────────┐
+         * │ AI suggestions       │
+         * ├──────────────────────┤
+         * │ existing keyboard    │
+         * └──────────────────────┘
+         */
+
+        val root =
+            LinearLayout(this).apply {
+
+                orientation =
+                    LinearLayout.VERTICAL
+
+                setBackgroundColor(
+                    Color.rgb(
+                        37,
+                        40,
+                        45
+                    )
+                )
+            }
+
+        val suggestionRow =
+            createSuggestionRow()
+
+        root.addView(
+            suggestionRow,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(48)
+            )
+        )
+
+        root.addView(
+            keyboardView,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        initializeLlmIfNeeded()
+
+        Log.d(
+            TAG,
+            "Keyboard view created successfully"
+        )
+
+        return root
     }
 
-    private fun setupKeys(view: View) {
+    // =========================================================
+    // CREATE SUGGESTION ROW
+    // =========================================================
+
+    private fun createSuggestionRow(): View {
+
+        val row =
+            LinearLayout(this).apply {
+
+                orientation =
+                    LinearLayout.HORIZONTAL
+
+                setPadding(
+                    dp(3),
+                    dp(2),
+                    dp(3),
+                    dp(2)
+                )
+
+                setBackgroundColor(
+                    Color.rgb(
+                        30,
+                        33,
+                        38
+                    )
+                )
+            }
+
+        val buttons =
+            mutableListOf<Button>()
+
+        repeat(3) { index ->
+
+            val button =
+                Button(this).apply {
+
+                    text =
+                        if (index == 0) {
+                            "AI loading…"
+                        } else {
+                            ""
+                        }
+
+                    isAllCaps = false
+                    textSize = 14f
+
+                    setTextColor(
+                        Color.WHITE
+                    )
+
+                    setBackgroundColor(
+                        Color.rgb(
+                            37,
+                            40,
+                            45
+                        )
+                    )
+
+                    setPadding(
+                        dp(5),
+                        0,
+                        dp(5),
+                        0
+                    )
+
+                    isEnabled = false
+
+                    setOnClickListener {
+
+                        val suggestion =
+                            text
+                                ?.toString()
+                                ?.trim()
+                                .orEmpty()
+
+                        if (
+                            suggestion.isNotBlank() &&
+                            suggestion != "AI loading…" &&
+                            suggestion != "AI unavailable"
+                        ) {
+
+                            insertSuggestion(
+                                suggestion
+                            )
+                        }
+                    }
+                }
+
+            row.addView(
+                button,
+                LinearLayout.LayoutParams(
+                    0,
+                    dp(44),
+                    1f
+                ).apply {
+
+                    val margin =
+                        dp(2)
+
+                    setMargins(
+                        margin,
+                        0,
+                        margin,
+                        0
+                    )
+                }
+            )
+
+            buttons.add(
+                button
+            )
+        }
+
+        suggestionButtons =
+            buttons
+
+        return row
+    }
+
+    // =========================================================
+    // INITIALIZE QWEN
+    // =========================================================
+
+    private fun initializeLlmIfNeeded() {
+
+        if (llmInitStarted) {
+
+            Log.d(
+                TAG,
+                "LLM initialization already started. Ready=$llmReady"
+            )
+
+            if (llmReady) {
+
+                startPredictionWorker()
+
+                schedulePrediction(
+                    delayMs = 100L
+                )
+            }
+
+            return
+        }
+
+        llmInitStarted = true
+
+        val modelFile =
+            File(
+                filesDir,
+                "models/model.litertlm"
+            )
+
+        Log.d(
+            TAG,
+            "Model path: ${modelFile.absolutePath}"
+        )
+
+        Log.d(
+            TAG,
+            "Model exists: ${modelFile.exists()}"
+        )
+
+        Log.d(
+            TAG,
+            "Model size: ${modelFile.length()} bytes"
+        )
+
+        if (
+            !modelFile.exists() ||
+            modelFile.length() == 0L
+        ) {
+
+            Log.e(
+                TAG,
+                "Model file missing or empty"
+            )
+
+            llmInitStarted = false
+
+            showLlmStatus(
+                "AI unavailable"
+            )
+
+            return
+        }
+
+        keyboardLlm =
+            KeyboardLlm(
+                modelFile.absolutePath
+            )
+
+        llmScope.launch {
+
+            try {
+
+                Log.i(
+                    TAG,
+                    "Initializing Qwen..."
+                )
+
+                keyboardLlm
+                    ?.initialize()
+
+                llmReady = true
+
+                /*
+                 * Start exactly one inference worker.
+                 */
+                startPredictionWorker()
+
+                Log.i(
+                    TAG,
+                    "Qwen initialized successfully"
+                )
+
+                withContext(
+                    Dispatchers.Main
+                ) {
+
+                    clearSuggestions()
+
+                    /*
+                     * User may already have typed while model
+                     * initialization was happening.
+                     */
+                    schedulePrediction(
+                        delayMs = 100L
+                    )
+                }
+
+            } catch (
+                e: CancellationException
+            ) {
+
+                throw e
+
+            } catch (
+                e: Exception
+            ) {
+
+                llmReady = false
+                llmInitStarted = false
+
+                Log.e(
+                    TAG,
+                    "Qwen initialization failed",
+                    e
+                )
+
+                withContext(
+                    Dispatchers.Main
+                ) {
+
+                    showLlmStatus(
+                        "AI unavailable"
+                    )
+                }
+            }
+        }
+    }
+
+    // =========================================================
+    // START SINGLE QWEN WORKER
+    // =========================================================
+
+    private fun startPredictionWorker() {
+
+        if (
+            predictionWorkerJob
+                ?.isActive == true
+        ) {
+            return
+        }
+
+        predictionWorkerJob =
+            llmScope.launch {
+
+                Log.d(
+                    TAG,
+                    "Prediction worker started"
+                )
+
+                for (
+                request
+                in predictionRequests
+                ) {
+
+                    try {
+
+                        Log.d(
+                            TAG,
+                            "Running prediction: ${
+                                request.context.takeLast(80)
+                            }"
+                        )
+
+                        /*
+                         * IMPORTANT:
+                         *
+                         * Once this starts, typing does NOT cancel it.
+                         */
+                        val predictions =
+                            keyboardLlm
+                                ?.predict(
+                                    request.context
+                                )
+                                .orEmpty()
+
+                        /*
+                         * Text changed while Qwen was working.
+                         *
+                         * Result is now outdated, so don't display it.
+                         */
+                        if (
+                            request.generation !=
+                            predictionGeneration
+                        ) {
+
+                            Log.d(
+                                TAG,
+                                "Discarding stale prediction"
+                            )
+
+                            continue
+                        }
+
+                        Log.i(
+                            TAG,
+                            "LIVE PREDICTIONS: $predictions"
+                        )
+
+                        withContext(
+                            Dispatchers.Main
+                        ) {
+
+                            showSuggestions(
+                                predictions
+                            )
+                        }
+
+                    } catch (
+                        e: CancellationException
+                    ) {
+
+                        /*
+                         * Expected only when service is shutting down.
+                         */
+                        throw e
+
+                    } catch (
+                        e: Exception
+                    ) {
+
+                        Log.e(
+                            TAG,
+                            "Prediction failed",
+                            e
+                        )
+                    }
+                }
+            }
+    }
+
+    // =========================================================
+    // DEBOUNCED PREDICTION REQUEST
+    // =========================================================
+
+    private fun schedulePrediction(
+        delayMs: Long = PREDICTION_DELAY_MS
+    ) {
+
+        if (!llmReady) {
+            return
+        }
+
+        predictionGeneration++
+
+        val generation =
+            predictionGeneration
+
+        /*
+         * Cancel ONLY the waiting debounce timer.
+         *
+         * Do not cancel predictionWorkerJob.
+         */
+        debounceJob
+            ?.cancel()
+
+        debounceJob =
+            llmScope.launch {
+
+                delay(
+                    delayMs
+                )
+
+                /*
+                 * InputConnection should be queried from Main.
+                 */
+                val context =
+                    withContext(
+                        Dispatchers.Main
+                    ) {
+
+                        currentInputConnection
+                            ?.getTextBeforeCursor(
+                                CONTEXT_LENGTH,
+                                0
+                            )
+                            ?.toString()
+                            .orEmpty()
+                    }
+
+                if (context.isBlank()) {
+
+                    withContext(
+                        Dispatchers.Main
+                    ) {
+
+                        if (
+                            generation ==
+                            predictionGeneration
+                        ) {
+
+                            clearSuggestions()
+                        }
+                    }
+
+                    return@launch
+                }
+
+                Log.d(
+                    TAG,
+                    "Queued prediction: ${
+                        context.takeLast(80)
+                    }"
+                )
+
+                /*
+                 * If Qwen is busy, Channel.CONFLATED replaces the
+                 * pending request with this newest one.
+                 */
+                val result =
+                    predictionRequests.trySend(
+                        PredictionRequest(
+                            context = context,
+                            generation = generation
+                        )
+                    )
+
+                if (result.isFailure) {
+
+                    Log.w(
+                        TAG,
+                        "Unable to queue prediction"
+                    )
+                }
+            }
+    }
+
+    // =========================================================
+    // DISPLAY PREDICTIONS
+    // =========================================================
+
+    private fun showSuggestions(
+        predictions: List<String>
+    ) {
+
+        suggestionButtons
+            .forEachIndexed { index, button ->
+
+                val prediction =
+                    predictions
+                        .getOrNull(index)
+                        ?.trim()
+                        .orEmpty()
+
+                if (
+                    prediction.isNotBlank()
+                ) {
+
+                    button.text =
+                        prediction
+
+                    button.isEnabled =
+                        true
+
+                } else {
+
+                    button.text = ""
+
+                    button.isEnabled =
+                        false
+                }
+            }
+    }
+
+    private fun clearSuggestions() {
+
+        suggestionButtons
+            .forEach { button ->
+
+                button.text = ""
+
+                button.isEnabled =
+                    false
+            }
+    }
+
+    private fun showLlmStatus(
+        message: String
+    ) {
+
+        suggestionButtons
+            .forEachIndexed { index, button ->
+
+                button.text =
+                    if (index == 0) {
+                        message
+                    } else {
+                        ""
+                    }
+
+                button.isEnabled =
+                    false
+            }
+    }
+
+    // =========================================================
+    // INSERT SELECTED PREDICTION
+    // =========================================================
+
+    private fun insertSuggestion(
+        suggestion: String
+    ) {
+
+        val connection =
+            currentInputConnection
+                ?: return
+
+        /*
+         * Once a suggestion is selected the previous predictions
+         * are stale.
+         */
+        predictionGeneration++
+
+        debounceJob
+            ?.cancel()
+
+        val previousCharacter =
+            connection
+                .getTextBeforeCursor(
+                    1,
+                    0
+                )
+                ?.toString()
+                .orEmpty()
+
+        val needsLeadingSpace =
+            previousCharacter.isNotEmpty() &&
+                    !previousCharacter
+                        .last()
+                        .isWhitespace()
+
+        val textToInsert =
+            buildString {
+
+                if (
+                    needsLeadingSpace
+                ) {
+                    append(" ")
+                }
+
+                append(
+                    suggestion
+                )
+
+                /*
+                 * Leave cursor ready for next word.
+                 */
+                append(" ")
+            }
+
+        Log.d(
+            TAG,
+            "Suggestion selected: $suggestion"
+        )
+
+        connection.commitText(
+            textToInsert,
+            1
+        )
+
+        clearSuggestions()
+
+        schedulePrediction(
+            delayMs = 350L
+        )
+    }
+
+    // =========================================================
+    // SETUP KEYS
+    // =========================================================
+
+    private fun setupKeys(
+        view: View
+    ) {
 
         // =========================
         // EMOJI BUTTON
         // =========================
 
-        view.findViewById<Button>(R.id.key_emoji)
-            .setOnClickListener {
+        view.findViewById<Button>(
+            R.id.key_emoji
+        ).setOnClickListener {
 
-                Log.d(TAG, "Opening emoji panel")
+            Log.d(
+                TAG,
+                "Opening emoji panel"
+            )
 
-                showEmojiPanel(view)
-            }
+            showEmojiPanel(
+                view
+            )
+        }
 
         // =========================
         // NUMBER + LETTER KEYS
         // =========================
 
-        val keys = mapOf(
-            R.id.key_1 to "1",
-            R.id.key_2 to "2",
-            R.id.key_3 to "3",
-            R.id.key_4 to "4",
-            R.id.key_5 to "5",
-            R.id.key_6 to "6",
-            R.id.key_7 to "7",
-            R.id.key_8 to "8",
-            R.id.key_9 to "9",
-            R.id.key_0 to "0",
+        val keys =
+            mapOf(
 
-            R.id.key_q to "q",
-            R.id.key_w to "w",
-            R.id.key_e to "e",
-            R.id.key_r to "r",
-            R.id.key_t to "t",
-            R.id.key_y to "y",
-            R.id.key_u to "u",
-            R.id.key_i to "i",
-            R.id.key_o to "o",
-            R.id.key_p to "p",
+                R.id.key_1 to "1",
+                R.id.key_2 to "2",
+                R.id.key_3 to "3",
+                R.id.key_4 to "4",
+                R.id.key_5 to "5",
+                R.id.key_6 to "6",
+                R.id.key_7 to "7",
+                R.id.key_8 to "8",
+                R.id.key_9 to "9",
+                R.id.key_0 to "0",
 
-            R.id.key_a to "a",
-            R.id.key_s to "s",
-            R.id.key_d to "d",
-            R.id.key_f to "f",
-            R.id.key_g to "g",
-            R.id.key_h to "h",
-            R.id.key_j to "j",
-            R.id.key_k to "k",
-            R.id.key_l to "l",
+                R.id.key_q to "q",
+                R.id.key_w to "w",
+                R.id.key_e to "e",
+                R.id.key_r to "r",
+                R.id.key_t to "t",
+                R.id.key_y to "y",
+                R.id.key_u to "u",
+                R.id.key_i to "i",
+                R.id.key_o to "o",
+                R.id.key_p to "p",
 
-            R.id.key_z to "z",
-            R.id.key_x to "x",
-            R.id.key_c to "c",
-            R.id.key_v to "v",
-            R.id.key_b to "b",
-            R.id.key_n to "n",
-            R.id.key_m to "m"
-        )
+                R.id.key_a to "a",
+                R.id.key_s to "s",
+                R.id.key_d to "d",
+                R.id.key_f to "f",
+                R.id.key_g to "g",
+                R.id.key_h to "h",
+                R.id.key_j to "j",
+                R.id.key_k to "k",
+                R.id.key_l to "l",
+
+                R.id.key_z to "z",
+                R.id.key_x to "x",
+                R.id.key_c to "c",
+                R.id.key_v to "v",
+                R.id.key_b to "b",
+                R.id.key_n to "n",
+                R.id.key_m to "m"
+            )
 
         // =========================
-        // NUMBER + LETTER PRESSES
+        // LETTER + NUMBER PRESSES
         // =========================
 
-        for ((id, keyText) in keys) {
+        for (
+        (id, keyText)
+        in keys
+        ) {
 
-            val button = view.findViewById<Button>(id)
+            val button =
+                view.findViewById<Button>(
+                    id
+                )
 
             button.setOnClickListener {
 
@@ -111,32 +864,45 @@ class LLMKeyboardService : InputMethodService() {
                         keyText.isNotEmpty() &&
                         keyText[0].isLetter()
                     ) {
+
                         keyText.uppercase()
+
                     } else {
+
                         keyText
                     }
 
-                Log.d(TAG, "Pressed: $output")
-
-                currentInputConnection?.commitText(
-                    output,
-                    1
+                Log.d(
+                    TAG,
+                    "Pressed: $output"
                 )
+
+                currentInputConnection
+                    ?.commitText(
+                        output,
+                        1
+                    )
 
                 if (
                     isShifted &&
                     keyText.isNotEmpty() &&
                     keyText[0].isLetter()
                 ) {
-                    isShifted = false
+
+                    isShifted =
+                        false
 
                     updateLetterDisplay(
                         view,
                         keys
                     )
 
-                    updateShiftButton(view)
+                    updateShiftButton(
+                        view
+                    )
                 }
+
+                schedulePrediction()
             }
         }
 
@@ -144,138 +910,218 @@ class LLMKeyboardService : InputMethodService() {
         // BACKSPACE
         // =========================
 
-        view.findViewById<Button>(R.id.key_backspace)
-            .setOnClickListener {
+        view.findViewById<Button>(
+            R.id.key_backspace
+        ).setOnClickListener {
 
-                Log.d(TAG, "Pressed: BACKSPACE")
+            Log.d(
+                TAG,
+                "Pressed: BACKSPACE"
+            )
 
-                currentInputConnection?.let {
-                    UnicodeInputHelper.deletePreviousGrapheme(it)
+            currentInputConnection
+                ?.let {
+
+                    UnicodeInputHelper
+                        .deletePreviousGrapheme(
+                            it
+                        )
                 }
-            }
+
+            schedulePrediction()
+        }
 
         // =========================
         // SPACE
         // =========================
 
-        view.findViewById<Button>(R.id.key_space)
-            .setOnClickListener {
+        view.findViewById<Button>(
+            R.id.key_space
+        ).setOnClickListener {
 
-                Log.d(TAG, "Pressed: SPACE")
+            Log.d(
+                TAG,
+                "Pressed: SPACE"
+            )
 
-                currentInputConnection?.commitText(
+            currentInputConnection
+                ?.commitText(
                     " ",
                     1
                 )
-            }
+
+            /*
+             * Space is a strong prediction boundary,
+             * so use a shorter debounce.
+             */
+            schedulePrediction(
+                delayMs = 250L
+            )
+        }
 
         // =========================
         // ENTER
         // =========================
 
-        view.findViewById<Button>(R.id.key_enter)
-            .setOnClickListener {
+        view.findViewById<Button>(
+            R.id.key_enter
+        ).setOnClickListener {
 
-                Log.d(TAG, "Pressed: ENTER")
+            Log.d(
+                TAG,
+                "Pressed: ENTER"
+            )
 
-                val editorInfo = currentInputEditorInfo
+            predictionGeneration++
 
-                if (editorInfo != null) {
+            debounceJob
+                ?.cancel()
 
-                    val action =
-                        editorInfo.imeOptions and
-                                android.view.inputmethod.EditorInfo.IME_MASK_ACTION
+            clearSuggestions()
 
-                    if (action != 0) {
-                        currentInputConnection?.performEditorAction(
+            val editorInfo =
+                currentInputEditorInfo
+
+            if (
+                editorInfo != null
+            ) {
+
+                val action =
+                    editorInfo
+                        .imeOptions and
+                            android.view.inputmethod
+                                .EditorInfo
+                                .IME_MASK_ACTION
+
+                if (
+                    action != 0
+                ) {
+
+                    currentInputConnection
+                        ?.performEditorAction(
                             action
                         )
-                    } else {
-                        currentInputConnection?.commitText(
+
+                } else {
+
+                    currentInputConnection
+                        ?.commitText(
                             "\n",
                             1
                         )
-                    }
+                }
 
-                } else {
-                    currentInputConnection?.commitText(
+            } else {
+
+                currentInputConnection
+                    ?.commitText(
                         "\n",
                         1
                     )
-                }
             }
+        }
 
         // =========================
         // SHIFT
         // =========================
 
-        view.findViewById<Button>(R.id.key_shift)
-            .setOnClickListener {
+        view.findViewById<Button>(
+            R.id.key_shift
+        ).setOnClickListener {
 
-                isShifted = !isShifted
+            isShifted =
+                !isShifted
 
-                Log.d(
-                    TAG,
-                    "Pressed: SHIFT -> shifted=$isShifted"
-                )
+            Log.d(
+                TAG,
+                "Pressed: SHIFT -> shifted=$isShifted"
+            )
 
-                updateLetterDisplay(
-                    view,
-                    keys
-                )
+            updateLetterDisplay(
+                view,
+                keys
+            )
 
-                updateShiftButton(view)
-            }
+            updateShiftButton(
+                view
+            )
+        }
 
         // =========================
         // SYMBOLS
         // =========================
 
-        view.findViewById<Button>(R.id.key_symbols)
-            .setOnClickListener {
+        view.findViewById<Button>(
+            R.id.key_symbols
+        ).setOnClickListener {
 
-                Log.d(TAG, "Pressed: SYMBOLS")
+            Log.d(
+                TAG,
+                "Pressed: SYMBOLS"
+            )
 
-                // TODO: symbols panel
-            }
+            // TODO: symbols panel
+        }
     }
 
     // =========================================================
     // EMOJI PANEL
     // =========================================================
 
-    private fun showEmojiPanel(view: View) {
+    private fun showEmojiPanel(
+        view: View
+    ) {
 
-        val parent = view as? ViewGroup ?: return
+        val parent =
+            view as? ViewGroup
+                ?: return
 
-        // Hide normal keyboard.
-        for (i in 0 until parent.childCount) {
-            parent.getChildAt(i).visibility = View.GONE
+        /*
+         * Hide normal keyboard contents.
+         */
+        for (
+        i in
+        0 until parent.childCount
+        ) {
+
+            parent
+                .getChildAt(i)
+                .visibility =
+                View.GONE
         }
 
-        val emojiView = layoutInflater.inflate(
-            R.layout.emoji_panel,
-            parent,
-            false
-        )
-
-        parent.addView(emojiView)
-
-        val emojiGrid =
-            emojiView.findViewById<GridLayout>(
-                R.id.emoji_grid
+        val emojiView =
+            layoutInflater.inflate(
+                R.layout.emoji_panel,
+                parent,
+                false
             )
 
-        val emojis = EmojiData.common
+        parent.addView(
+            emojiView
+        )
 
-        for ((index, emoji) in emojis.withIndex()) {
+        val emojiGrid =
+            emojiView
+                .findViewById<GridLayout>(
+                    R.id.emoji_grid
+                )
 
-            val button = ImageButton(this)
+        val emojis =
+            EmojiData.common
 
-            // Our generated image assets:
-            // emoji_01.png ... emoji_48.png
+        for (
+        (index, emoji)
+        in emojis.withIndex()
+        ) {
+
+            val button =
+                ImageButton(this)
+
             val drawableName =
-                "emoji_%02d".format(index + 1)
+                "emoji_%02d".format(
+                    index + 1
+                )
 
             val drawableId =
                 resources.getIdentifier(
@@ -284,8 +1130,13 @@ class LLMKeyboardService : InputMethodService() {
                     packageName
                 )
 
-            if (drawableId != 0) {
-                button.setImageResource(drawableId)
+            if (
+                drawableId != 0
+            ) {
+
+                button.setImageResource(
+                    drawableId
+                )
             }
 
             button.setPadding(
@@ -296,18 +1147,32 @@ class LLMKeyboardService : InputMethodService() {
             )
 
             button.scaleType =
-                android.widget.ImageView.ScaleType.CENTER_INSIDE
+                android.widget.ImageView
+                    .ScaleType
+                    .CENTER_INSIDE
 
             button.setBackgroundColor(
-                Color.rgb(37, 40, 45)
+                Color.rgb(
+                    37,
+                    40,
+                    45
+                )
             )
 
-            val density = resources.displayMetrics.density
+            val density =
+                resources
+                    .displayMetrics
+                    .density
 
-            val params = GridLayout.LayoutParams()
+            val params =
+                GridLayout
+                    .LayoutParams()
 
             params.width = 0
-            params.height = (44 * density).toInt()
+
+            params.height =
+                (44 * density)
+                    .toInt()
 
             params.columnSpec =
                 GridLayout.spec(
@@ -315,7 +1180,9 @@ class LLMKeyboardService : InputMethodService() {
                     1f
                 )
 
-            val margin = (1 * density).toInt()
+            val margin =
+                (1 * density)
+                    .toInt()
 
             params.setMargins(
                 margin,
@@ -324,7 +1191,8 @@ class LLMKeyboardService : InputMethodService() {
                 margin
             )
 
-            button.layoutParams = params
+            button.layoutParams =
+                params
 
             button.setOnClickListener {
 
@@ -333,30 +1201,45 @@ class LLMKeyboardService : InputMethodService() {
                     "Pressed emoji: $emoji"
                 )
 
-                // Insert the original Unicode emoji.
-                currentInputConnection?.commitText(
-                    emoji,
-                    1
-                )
+                currentInputConnection
+                    ?.commitText(
+                        emoji,
+                        1
+                    )
+
+                schedulePrediction()
             }
 
-            emojiGrid.addView(button)
+            emojiGrid.addView(
+                button
+            )
         }
 
         // =========================
         // RETURN TO KEYBOARD
         // =========================
 
-        emojiView.findViewById<Button>(
-            R.id.key_emoji_back
-        ).setOnClickListener {
+        emojiView
+            .findViewById<Button>(
+                R.id.key_emoji_back
+            )
+            .setOnClickListener {
 
-            parent.removeView(emojiView)
+                parent.removeView(
+                    emojiView
+                )
 
-            for (i in 0 until parent.childCount) {
-                parent.getChildAt(i).visibility = View.VISIBLE
+                for (
+                i in
+                0 until parent.childCount
+                ) {
+
+                    parent
+                        .getChildAt(i)
+                        .visibility =
+                        View.VISIBLE
+                }
             }
-        }
     }
 
     // =========================================================
@@ -368,22 +1251,33 @@ class LLMKeyboardService : InputMethodService() {
         keys: Map<Int, String>
     ) {
 
-        for ((id, keyText) in keys) {
+        for (
+        (id, keyText)
+        in keys
+        ) {
 
             if (
                 keyText.isEmpty() ||
                 !keyText[0].isLetter()
             ) {
+
                 continue
             }
 
             val button =
-                view.findViewById<Button>(id)
+                view.findViewById<Button>(
+                    id
+                )
 
             button.text =
-                if (isShifted) {
+                if (
+                    isShifted
+                ) {
+
                     keyText.uppercase()
+
                 } else {
+
                     keyText
                 }
         }
@@ -393,16 +1287,93 @@ class LLMKeyboardService : InputMethodService() {
     // UPDATE SHIFT BUTTON
     // =========================================================
 
-    private fun updateShiftButton(view: View) {
+    private fun updateShiftButton(
+        view: View
+    ) {
 
         val shiftButton =
-            view.findViewById<Button>(R.id.key_shift)
+            view.findViewById<Button>(
+                R.id.key_shift
+            )
 
         shiftButton.text =
-            if (isShifted) {
+            if (
+                isShifted
+            ) {
+
                 "SHIFT"
+
             } else {
+
                 "⇧"
             }
+    }
+
+    // =========================================================
+    // DP HELPER
+    // =========================================================
+
+    private fun dp(
+        value: Int
+    ): Int {
+
+        return (
+                value *
+                        resources
+                            .displayMetrics
+                            .density
+                ).toInt()
+    }
+
+    // =========================================================
+    // CLEANUP
+    // =========================================================
+
+    override fun onDestroy() {
+
+        Log.d(
+            TAG,
+            "Destroying keyboard service"
+        )
+
+        /*
+         * Invalidate any pending result.
+         */
+        predictionGeneration++
+
+        /*
+         * Cancel only our jobs because the service itself is dying.
+         */
+        debounceJob
+            ?.cancel()
+
+        predictionRequests
+            .close()
+
+        predictionWorkerJob
+            ?.cancel()
+
+        try {
+
+            keyboardLlm
+                ?.close()
+
+        } catch (
+            e: Exception
+        ) {
+
+            Log.e(
+                TAG,
+                "Error closing LLM",
+                e
+            )
+        }
+
+        keyboardLlm = null
+        llmReady = false
+
+        llmScope.cancel()
+
+        super.onDestroy()
     }
 }

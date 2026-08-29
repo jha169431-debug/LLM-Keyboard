@@ -54,4 +54,7 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.1")
 }
+
+
