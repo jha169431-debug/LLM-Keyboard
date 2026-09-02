@@ -2,42 +2,44 @@
 <resources>
 
     <!-- ===================================================== -->
-    <!-- LETTER KEYS                                           -->
+    <!-- STANDARD LETTER KEY                                   -->
     <!-- ===================================================== -->
 
     <style name="KeyboardKey">
-
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">match_parent</item>
         <item name="android:layout_weight">1</item>
 
-        <item name="android:layout_marginStart">3dp</item>
-        <item name="android:layout_marginEnd">3dp</item>
-        <item name="android:layout_marginTop">3dp</item>
-        <item name="android:layout_marginBottom">3dp</item>
+        <!-- Breathing room between keys -->
+        <item name="android:layout_marginStart">2dp</item>
+        <item name="android:layout_marginEnd">2dp</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:layout_marginBottom">2dp</item>
 
+        <!-- Custom glass surface -->
         <item name="android:background">@drawable/bg_glass_key</item>
         <item name="android:backgroundTint">@null</item>
 
-        <!-- Dark graphite text -->
-        <item name="android:textColor">@color/kb_text</item>
-        <item name="android:textSize">19sp</item>
+        <!-- Typography -->
+        <item name="android:textColor">#F2FFFFFF</item>
+        <item name="android:textSize">18sp</item>
         <item name="android:fontFamily">sans-serif-medium</item>
-
+        <item name="android:textStyle">normal</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:includeFontPadding">false</item>
 
+        <!-- Center everything exactly -->
         <item name="android:gravity">center</item>
         <item name="android:padding">0dp</item>
 
+        <!-- Kill Android Button defaults -->
         <item name="android:minWidth">0dp</item>
         <item name="android:minHeight">0dp</item>
-
         <item name="android:elevation">0dp</item>
         <item name="android:stateListAnimator">@null</item>
 
+        <!-- Slightly tighter text rendering -->
         <item name="android:letterSpacing">0.01</item>
-
     </style>
 
 
@@ -45,49 +47,50 @@
     <!-- NUMBER ROW                                            -->
     <!-- ===================================================== -->
 
-    <style name="KeyboardKeySmall"
-        parent="KeyboardKey">
+    <style name="KeyboardKeySmall" parent="KeyboardKey">
 
         <item name="android:textSize">14sp</item>
-        <item name="android:textColor">@color/kb_text_secondary</item>
-        <item name="android:fontFamily">sans-serif-medium</item>
+
+        <!-- Numbers should be slightly quieter than letters -->
+        <item name="android:textColor">#CFFFFFFF</item>
+
+        <item name="android:fontFamily">sans-serif</item>
+
         <item name="android:letterSpacing">0</item>
 
     </style>
 
 
     <!-- ===================================================== -->
-    <!-- ACTION KEYS                                           -->
+    <!-- SHIFT / BACKSPACE / SYMBOL / EMOJI                    -->
     <!-- ===================================================== -->
 
-    <style name="KeyboardActionKey"
-        parent="KeyboardKey">
+    <style name="KeyboardActionKey" parent="KeyboardKey">
 
         <item name="android:background">@drawable/bg_glass_action</item>
 
-        <item name="android:textColor">@color/kb_text_secondary</item>
+        <item name="android:textColor">#EFFFFFFF</item>
 
         <item name="android:fontFamily">sans-serif-medium</item>
 
-        <item name="android:letterSpacing">0</item>
-
+        <!-- Make utility keys feel slightly different -->
+        <item name="android:letterSpacing">0</item>0
     </style>
 
 
     <!-- ===================================================== -->
-    <!-- SPACE                                                 -->
+    <!-- SPACE BAR                                             -->
     <!-- ===================================================== -->
 
-    <style name="KeyboardSpaceKey"
-        parent="KeyboardKey">
+    <style name="KeyboardSpaceKey" parent="KeyboardKey">
 
         <item name="android:background">@drawable/bg_glass_space</item>
 
-        <item name="android:textColor">@color/kb_text_secondary</item>
+        <item name="android:textColor">#CFFFFFFF</item>
 
         <item name="android:textSize">12sp</item>
 
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">sans-serif</item>
 
         <item name="android:letterSpacing">0.02</item>
 
@@ -95,15 +98,14 @@
 
 
     <!-- ===================================================== -->
-    <!-- ENTER                                                 -->
+    <!-- ENTER / PRIMARY ACTION                                -->
     <!-- ===================================================== -->
 
-    <style name="KeyboardAccentKey"
-        parent="KeyboardKey">
+    <style name="KeyboardAccentKey" parent="KeyboardKey">
 
         <item name="android:background">@drawable/bg_glass_accent</item>
 
-        <item name="android:textColor">@color/kb_text_secondary</item>
+        <item name="android:textColor">#FFFFFFFF</item>
 
         <item name="android:fontFamily">sans-serif-medium</item>
 

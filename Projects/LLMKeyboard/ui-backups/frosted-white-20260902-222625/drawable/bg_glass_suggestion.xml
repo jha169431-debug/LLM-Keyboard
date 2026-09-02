@@ -3,15 +3,21 @@
 
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
-            <solid android:color="@color/kb_key_pressed_bottom" />
+
+            <solid android:color="#293B4552" />
+
             <corners android:radius="8dp" />
+
         </shape>
     </item>
 
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#32FFFFFF" />
+
+            <solid android:color="#00000000" />
+
             <corners android:radius="8dp" />
+
         </shape>
     </item>
 

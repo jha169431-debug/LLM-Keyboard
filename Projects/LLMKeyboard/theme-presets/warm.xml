@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="kb_deck_top">#F5FBF8F1</color>
+    <color name="kb_deck_mid">#F1F5F0E8</color>
+    <color name="kb_deck_bottom">#F7ECE7DC</color>
+    <color name="kb_deck_border">#80FFFFFF</color>
+
+    <color name="kb_key_top">#EEFFFDF7</color>
+    <color name="kb_key_bottom">#CDDCD7CC</color>
+    <color name="kb_key_pressed_top">#FFFFFFFF</color>
+    <color name="kb_key_pressed_bottom">#FFEAE4D9</color>
+    <color name="kb_key_border">#DFFFFFFF</color>
+
+    <color name="kb_action_top">#EAEFEBE2</color>
+    <color name="kb_action_bottom">#D0D8D1C5</color>
+
+    <color name="kb_space_top">#F0FFFDF7</color>
+    <color name="kb_space_bottom">#CEDDD7CB</color>
+
+    <color name="kb_accent_top">#F2FAF4E8</color>
+    <color name="kb_accent_bottom">#D9DDD0BC</color>
+
+    <color name="kb_suggestion_bar_top">#F8FFFCF6</color>
+    <color name="kb_suggestion_bar_bottom">#EEEDE8DF</color>
+
+    <color name="kb_text">#FF292722</color>
+    <color name="kb_text_secondary">#CB38352E</color>
+    <color name="kb_suggestion_text">#FF2C2924</color>
+</resources>

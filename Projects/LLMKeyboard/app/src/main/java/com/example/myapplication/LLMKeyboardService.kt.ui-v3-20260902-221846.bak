@@ -116,12 +116,6 @@ class LLMKeyboardService : InputMethodService() {
     private var suggestionButtons:
             List<Button> = emptyList()
 
-    /*
-     * The suggestion strip must consume zero height when empty.
-     */
-    private var suggestionRowView: View? = null
-
-
     // =========================================================
     // CREATE KEYBOARD
     // =========================================================
@@ -203,56 +197,47 @@ class LLMKeyboardService : InputMethodService() {
                 orientation =
                     LinearLayout.HORIZONTAL
 
+                /*
+                 * Integrated top strip:
+                 * thin, quiet, and visually connected to the deck.
+                 */
                 setPadding(
-                    dp(8),
-                    0,
-                    dp(8),
-                    0
+                    dp(6),
+                    dp(1),
+                    dp(6),
+                    dp(1)
                 )
 
                 setBackgroundResource(
                     R.drawable.bg_glass_suggestion_bar
                 )
-
-                /*
-                 * Critical UI behavior:
-                 *
-                 * No predictions = no suggestion-row height.
-                 */
-                visibility =
-                    View.GONE
             }
 
         val buttons =
             mutableListOf<Button>()
 
-        repeat(3) {
+        repeat(3) { index ->
 
             val button =
                 Button(this).apply {
 
-                    /*
-                     * Never reserve UI space for fake status text.
-                     */
-                    text = ""
+                    text =
+                        if (index == 0) {
+                            "AI loading…"
+                        } else {
+                            ""
+                        }
 
-                    isAllCaps =
-                        false
+                    isAllCaps = false
 
                     textSize =
                         15f
 
-                    typeface =
-                        android.graphics.Typeface.create(
-                            "sans-serif-medium",
-                            android.graphics.Typeface.NORMAL
-                        )
-
                     setTextColor(
                         Color.rgb(
-                            35,
-                            42,
-                            49
+                            238,
+                            241,
+                            246
                         )
                     )
 
@@ -279,9 +264,9 @@ class LLMKeyboardService : InputMethodService() {
                         0f
 
                     setPadding(
-                        dp(8),
+                        dp(6),
                         0,
-                        dp(8),
+                        dp(6),
                         0
                     )
 
@@ -297,7 +282,9 @@ class LLMKeyboardService : InputMethodService() {
                                 .orEmpty()
 
                         if (
-                            suggestion.isNotBlank()
+                            suggestion.isNotBlank() &&
+                            suggestion != "AI loading…" &&
+                            suggestion != "AI unavailable"
                         ) {
 
                             insertSuggestion(
@@ -311,14 +298,14 @@ class LLMKeyboardService : InputMethodService() {
                 button,
                 LinearLayout.LayoutParams(
                     0,
-                    dp(38),
+                    dp(40),
                     1f
                 ).apply {
 
                     setMargins(
-                        dp(2),
+                        dp(1),
                         0,
-                        dp(2),
+                        dp(1),
                         0
                     )
                 }
@@ -331,9 +318,6 @@ class LLMKeyboardService : InputMethodService() {
 
         suggestionButtons =
             buttons
-
-        suggestionRowView =
-            row
 
         return row
     }
@@ -1057,37 +1041,17 @@ class LLMKeyboardService : InputMethodService() {
         predictions: List<String>
     ) {
 
-        val visiblePredictions =
-            predictions
-                .map {
-                    it.trim()
-                }
-                .filter {
-                    it.isNotBlank()
-                }
-                .take(3)
-
-        /*
-         * No useful predictions means no strip at all.
-         */
-        if (
-            visiblePredictions.isEmpty()
-        ) {
-
-            clearSuggestions()
-            return
-        }
-
         suggestionButtons
             .forEachIndexed { index, button ->
 
                 val prediction =
-                    visiblePredictions
+                    predictions
                         .getOrNull(index)
+                        ?.trim()
                         .orEmpty()
 
                 if (
-                    prediction.isNotEmpty()
+                    prediction.isNotBlank()
                 ) {
 
                     button.text =
@@ -1096,44 +1060,12 @@ class LLMKeyboardService : InputMethodService() {
                     button.isEnabled =
                         true
 
-                    button.visibility =
-                        View.VISIBLE
-
                 } else {
 
-                    button.text =
-                        ""
+                    button.text = ""
 
                     button.isEnabled =
                         false
-
-                    /*
-                     * Retain equal column geometry while the strip
-                     * exists, but leave unused slots visually empty.
-                     */
-                    button.visibility =
-                        View.INVISIBLE
-                }
-            }
-
-        suggestionRowView
-            ?.apply {
-
-                if (
-                    visibility !=
-                    View.VISIBLE
-                ) {
-
-                    alpha =
-                        0f
-
-                    visibility =
-                        View.VISIBLE
-
-                    animate()
-                        .alpha(1f)
-                        .setDuration(90L)
-                        .start()
                 }
             }
     }
@@ -1143,31 +1075,10 @@ class LLMKeyboardService : InputMethodService() {
         suggestionButtons
             .forEach { button ->
 
-                button.text =
-                    ""
+                button.text = ""
 
                 button.isEnabled =
                     false
-
-                button.visibility =
-                    View.VISIBLE
-            }
-
-        /*
-         * GONE, rather than INVISIBLE, is the important part:
-         * the keyboard immediately gives the 38dp back to the app.
-         */
-        suggestionRowView
-            ?.apply {
-
-                animate()
-                    .cancel()
-
-                alpha =
-                    1f
-
-                visibility =
-                    View.GONE
             }
     }
 

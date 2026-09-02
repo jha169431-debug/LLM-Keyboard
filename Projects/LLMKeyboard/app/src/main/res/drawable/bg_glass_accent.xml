@@ -5,12 +5,11 @@
         <shape android:shape="rectangle">
             <gradient
                 android:angle="270"
-                android:startColor="#E580B8FF"
-                android:endColor="#B94C80C9" />
-            <stroke
-                android:width="1dp"
-                android:color="#88D7ECFF" />
-            <corners android:radius="11dp" />
+                android:startColor="@color/kb_key_pressed_top"
+                android:endColor="@color/kb_key_pressed_bottom" />
+            <stroke android:width="1dp"
+                android:color="@color/kb_key_border" />
+            <corners android:radius="9dp" />
         </shape>
     </item>
 
@@ -18,12 +17,11 @@
         <shape android:shape="rectangle">
             <gradient
                 android:angle="270"
-                android:startColor="#C95C9DEB"
-                android:endColor="#98416FA8" />
-            <stroke
-                android:width="1dp"
-                android:color="#66D7ECFF" />
-            <corners android:radius="11dp" />
+                android:startColor="@color/kb_accent_top"
+                android:endColor="@color/kb_accent_bottom" />
+            <stroke android:width="1dp"
+                android:color="@color/kb_key_border" />
+            <corners android:radius="9dp" />
         </shape>
     </item>
 

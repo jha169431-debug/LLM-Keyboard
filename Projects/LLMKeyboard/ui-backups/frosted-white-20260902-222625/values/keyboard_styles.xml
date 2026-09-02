@@ -1,16 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- ===================================================== -->
-    <!-- LETTER KEYS                                           -->
-    <!-- ===================================================== -->
-
     <style name="KeyboardKey">
 
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">match_parent</item>
         <item name="android:layout_weight">1</item>
 
+        <!-- More visible separation -->
         <item name="android:layout_marginStart">3dp</item>
         <item name="android:layout_marginEnd">3dp</item>
         <item name="android:layout_marginTop">3dp</item>
@@ -19,19 +16,18 @@
         <item name="android:background">@drawable/bg_glass_key</item>
         <item name="android:backgroundTint">@null</item>
 
-        <!-- Dark graphite text -->
-        <item name="android:textColor">@color/kb_text</item>
+        <item name="android:textColor">#FFFFFFFF</item>
         <item name="android:textSize">19sp</item>
         <item name="android:fontFamily">sans-serif-medium</item>
-
-        <item name="android:textAllCaps">false</item>
-        <item name="android:includeFontPadding">false</item>
 
         <item name="android:gravity">center</item>
         <item name="android:padding">0dp</item>
 
         <item name="android:minWidth">0dp</item>
         <item name="android:minHeight">0dp</item>
+
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:textAllCaps">false</item>
 
         <item name="android:elevation">0dp</item>
         <item name="android:stateListAnimator">@null</item>
@@ -41,72 +37,45 @@
     </style>
 
 
-    <!-- ===================================================== -->
-    <!-- NUMBER ROW                                            -->
-    <!-- ===================================================== -->
-
     <style name="KeyboardKeySmall"
         parent="KeyboardKey">
 
         <item name="android:textSize">14sp</item>
-        <item name="android:textColor">@color/kb_text_secondary</item>
+        <item name="android:textColor">#D9FFFFFF</item>
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:letterSpacing">0</item>
 
     </style>
 
-
-    <!-- ===================================================== -->
-    <!-- ACTION KEYS                                           -->
-    <!-- ===================================================== -->
 
     <style name="KeyboardActionKey"
         parent="KeyboardKey">
 
         <item name="android:background">@drawable/bg_glass_action</item>
-
-        <item name="android:textColor">@color/kb_text_secondary</item>
-
+        <item name="android:textColor">#F2FFFFFF</item>
         <item name="android:fontFamily">sans-serif-medium</item>
-
         <item name="android:letterSpacing">0</item>
 
     </style>
 
 
-    <!-- ===================================================== -->
-    <!-- SPACE                                                 -->
-    <!-- ===================================================== -->
-
     <style name="KeyboardSpaceKey"
         parent="KeyboardKey">
 
         <item name="android:background">@drawable/bg_glass_space</item>
-
-        <item name="android:textColor">@color/kb_text_secondary</item>
-
-        <item name="android:textSize">12sp</item>
-
+        <item name="android:textColor">#D8FFFFFF</item>
         <item name="android:fontFamily">sans-serif-medium</item>
-
         <item name="android:letterSpacing">0.02</item>
 
     </style>
 
 
-    <!-- ===================================================== -->
-    <!-- ENTER                                                 -->
-    <!-- ===================================================== -->
-
     <style name="KeyboardAccentKey"
         parent="KeyboardKey">
 
         <item name="android:background">@drawable/bg_glass_accent</item>
-
-        <item name="android:textColor">@color/kb_text_secondary</item>
-
+        <item name="android:textColor">#FFFFFFFF</item>
         <item name="android:fontFamily">sans-serif-medium</item>
-
         <item name="android:letterSpacing">0</item>
 
     </style>

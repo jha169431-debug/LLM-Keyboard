@@ -20,7 +20,7 @@
         <item name="android:backgroundTint">@null</item>
 
         <!-- Dark graphite text -->
-        <item name="android:textColor">@color/kb_text</item>
+        <item name="android:textColor">#FF1D242B</item>
         <item name="android:textSize">19sp</item>
         <item name="android:fontFamily">sans-serif-medium</item>
 
@@ -49,7 +49,7 @@
         parent="KeyboardKey">
 
         <item name="android:textSize">14sp</item>
-        <item name="android:textColor">@color/kb_text_secondary</item>
+        <item name="android:textColor">#C8273038</item>
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:letterSpacing">0</item>
 
@@ -65,7 +65,7 @@
 
         <item name="android:background">@drawable/bg_glass_action</item>
 
-        <item name="android:textColor">@color/kb_text_secondary</item>
+        <item name="android:textColor">#E5222930</item>
 
         <item name="android:fontFamily">sans-serif-medium</item>
 
@@ -83,7 +83,7 @@
 
         <item name="android:background">@drawable/bg_glass_space</item>
 
-        <item name="android:textColor">@color/kb_text_secondary</item>
+        <item name="android:textColor">#B8222930</item>
 
         <item name="android:textSize">12sp</item>
 
@@ -103,7 +103,7 @@
 
         <item name="android:background">@drawable/bg_glass_accent</item>
 
-        <item name="android:textColor">@color/kb_text_secondary</item>
+        <item name="android:textColor">#FF24313A</item>
 
         <item name="android:fontFamily">sans-serif-medium</item>
 

@@ -3,27 +3,35 @@
 
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
+
             <gradient
                 android:angle="270"
-                android:startColor="@color/kb_key_pressed_top"
-                android:endColor="@color/kb_key_pressed_bottom" />
+                android:startColor="#FFFFFFFF"
+                android:endColor="#FFE7EDF2" />
+
             <stroke
                 android:width="1dp"
-                android:color="@color/kb_key_border" />
+                android:color="#B8FFFFFF" />
+
             <corners android:radius="7dp" />
+
         </shape>
     </item>
 
     <item>
         <shape android:shape="rectangle">
+
             <gradient
                 android:angle="270"
-                android:startColor="@color/kb_key_top"
-                android:endColor="@color/kb_key_bottom" />
+                android:startColor="#DFFFFFFF"
+                android:endColor="#BEE7ECF1" />
+
             <stroke
                 android:width="1dp"
-                android:color="@color/kb_key_border" />
+                android:color="#D0FFFFFF" />
+
             <corners android:radius="7dp" />
+
         </shape>
     </item>
 

@@ -5,15 +5,19 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@drawable/bg_glass_keyboard"
-    android:paddingStart="3dp"
-    android:paddingTop="3dp"
-    android:paddingEnd="3dp"
-    android:paddingBottom="4dp">
+    android:paddingStart="5dp"
+    android:paddingTop="2dp"
+    android:paddingEnd="5dp"
+    android:paddingBottom="5dp">
 
-    <!-- Number row -->
+    <!-- ========================================================= -->
+    <!-- NUMBER ROW                                                -->
+    <!-- Slightly shorter than main letter rows                    -->
+    <!-- ========================================================= -->
+
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="44dp"
+        android:layout_height="38dp"
         android:orientation="horizontal">
 
         <Button
@@ -68,11 +72,15 @@
 
     </LinearLayout>
 
-    <!-- QWERTY row -->
+    <!-- ========================================================= -->
+    <!-- QWERTY ROW                                                -->
+    <!-- ========================================================= -->
+
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:orientation="horizontal">
+        android:layout_height="47dp"
+        android:orientation="horizontal"
+        android:layout_marginTop="2dp">
 
         <Button
             android:id="@+id/key_q"
@@ -126,13 +134,18 @@
 
     </LinearLayout>
 
-    <!-- ASDF row -->
+    <!-- ========================================================= -->
+    <!-- ASDF ROW                                                  -->
+    <!-- Slight inset gives a proper staggered keyboard layout     -->
+    <!-- ========================================================= -->
+
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="52dp"
+        android:layout_height="47dp"
         android:orientation="horizontal"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp">
+        android:layout_marginTop="2dp"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp">
 
         <Button
             android:id="@+id/key_a"
@@ -181,18 +194,22 @@
 
     </LinearLayout>
 
-    <!-- ZXCV row -->
+    <!-- ========================================================= -->
+    <!-- ZXCV ROW                                                  -->
+    <!-- ========================================================= -->
+
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:orientation="horizontal">
+        android:layout_height="47dp"
+        android:orientation="horizontal"
+        android:layout_marginTop="2dp">
 
         <Button
             android:id="@+id/key_shift"
             style="@style/KeyboardActionKey"
-            android:layout_weight="1.35"
+            android:layout_weight="1.25"
             android:text="⇧"
-            android:textSize="21sp" />
+            android:textSize="20sp" />
 
         <Button
             android:id="@+id/key_z"
@@ -232,46 +249,50 @@
         <Button
             android:id="@+id/key_backspace"
             style="@style/KeyboardActionKey"
-            android:layout_weight="1.35"
+            android:layout_weight="1.25"
             android:text="⌫"
-            android:textSize="21sp" />
+            android:textSize="20sp" />
 
     </LinearLayout>
 
-    <!-- Bottom row -->
+    <!-- ========================================================= -->
+    <!-- BOTTOM ACTION ROW                                         -->
+    <!-- ========================================================= -->
+
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="54dp"
-        android:orientation="horizontal">
+        android:layout_height="49dp"
+        android:orientation="horizontal"
+        android:layout_marginTop="3dp">
 
         <Button
             android:id="@+id/key_symbols"
             style="@style/KeyboardActionKey"
-            android:layout_weight="1.35"
+            android:layout_weight="1.25"
             android:text="\?123"
             android:textSize="13sp" />
 
         <Button
             android:id="@+id/key_emoji"
             style="@style/KeyboardActionKey"
-            android:layout_weight="1.35"
-            android:drawableTop="@drawable/ic_emoji"
+            android:layout_weight="1.25"
             android:gravity="center"
-            android:text="" />
+            android:textSize="22sp"
+            android:text="☺" />
 
         <Button
             android:id="@+id/key_space"
             style="@style/KeyboardSpaceKey"
-            android:layout_weight="5"
+            android:layout_weight="4.8"
             android:text="English"
-            android:textSize="13sp" />
+            android:textSize="12sp" />
 
         <Button
             android:id="@+id/key_enter"
             style="@style/KeyboardAccentKey"
-            android:layout_weight="1.45"
+            android:layout_weight="1.35"
             android:text="↵"
-            android:textSize="22sp" />
+            android:textSize="21sp" />
 
     </LinearLayout>
 

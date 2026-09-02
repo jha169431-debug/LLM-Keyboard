@@ -4,17 +4,17 @@
 
     <gradient
         android:angle="270"
-        android:startColor="@color/kb_deck_top"
-        android:centerColor="@color/kb_deck_mid"
-        android:endColor="@color/kb_deck_bottom" />
+        android:startColor="#F0181B22"
+        android:centerColor="#EC12151B"
+        android:endColor="#F00A0C10" />
 
     <stroke
         android:width="1dp"
-        android:color="@color/kb_deck_border" />
+        android:color="#22FFFFFF" />
 
     <corners
-        android:topLeftRadius="16dp"
-        android:topRightRadius="16dp"
+        android:topLeftRadius="22dp"
+        android:topRightRadius="22dp"
         android:bottomLeftRadius="0dp"
         android:bottomRightRadius="0dp" />
 
