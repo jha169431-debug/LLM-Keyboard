@@ -1205,31 +1205,6 @@ class LLMKeyboardService : InputMethodService() {
             connection.endBatchEdit()
         }
 
-        // =================================================
-        // LEARN AFTER SUGGESTION COMMIT
-        // =================================================
-
-        /*
-         * insertSuggestion() adds its own trailing space, so this path
-         * bypasses the physical SPACE key.
-         *
-         * Learn the completed word pair here as well.
-         */
-        val textAfterSuggestion =
-            currentInputConnection
-                ?.getTextBeforeCursor(
-                    CONTEXT_LENGTH,
-                    0
-                )
-                ?.toString()
-                .orEmpty()
-                .trimEnd()
-
-        userHistoryPredictor
-            .learnFromText(
-                textAfterSuggestion
-            )
-
         clearSuggestions()
 
         /*

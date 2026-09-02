@@ -18,7 +18,7 @@ class KeyboardLlm(
 
     companion object {
         private const val TAG = "LLMKeyboard"
-        private const val MAX_OUTPUT_TOKENS = 24
+        private const val MAX_OUTPUT_TOKENS = 16
     }
 
     private var engine: Engine? = null
@@ -195,57 +195,50 @@ class KeyboardLlm(
         context: String
     ): List<String> {
 
-        val cleanContext =
-            context
-                .takeLast(256)
-                .trimStart()
-
-        /*
-         * Word completion is handled by LocalSuggestionEngine.
-         *
-         * Qwen has exactly ONE responsibility:
-         * contextual NEXT-WORD prediction after a word boundary.
-         */
         val config =
             ConversationConfig(
-
                 systemInstruction =
                     Contents.of(
                         """
-                        You are a next-word prediction component for a smartphone keyboard.
+                        You are the prediction engine of a smartphone keyboard.
 
-                        Given text immediately before the cursor, return exactly three likely next words.
+                        Predict what the user is most likely to type immediately after the cursor.
 
-                        Requirements:
-                        - Predict words that naturally continue the supplied text.
-                        - Use grammar and meaning from the supplied text.
-                        - Each candidate must be exactly one word.
-                        - Candidates must be different.
-                        - Prefer common conversational wording.
-                        - Contractions and hyphenated words are allowed.
-                        - Do not repeat the entire context.
-                        - Do not write sentences or phrases.
-                        - Do not number the candidates.
-                        - Do not use bullets.
+                        Rules:
+                        - Use the supplied context to understand the sentence.
+                        - Each answer must add new text after the cursor.
+                        - Do not simply repeat the supplied context.
+                        - Return exactly 3 different likely continuations.
+                        - Prefer natural next words or very short phrases.
+                        - Keep every continuation concise.
+                        - Separate the 3 continuations using |.
+                        - Do not use numbering.
+                        - Do not use bullet points.
                         - Do not use quotation marks.
-                        - Do not add labels.
-                        - Do not explain the result.
-                        - Separate the three candidates using the vertical bar character.
-                        - Output candidates only.
+                        - Do not include labels.
+                        - Do not write "Next", "Suggestion", "Prediction", "Context", or "Output".
+                        - Do not explain your answer.
+
+                        Output only the 3 continuations separated by |.
                         """.trimIndent()
                     ),
 
                 samplerConfig =
                     SamplerConfig(
-                        topK = 30,
-                        topP = 0.90,
-                        temperature = 0.55
+                        topK = 20,
+                        topP = 0.85,
+                        temperature = 0.4
                     )
             )
 
+        val cleanContext =
+            context
+                .takeLast(256)
+                .trimStart()
+
         Log.d(
             TAG,
-            "Inference START backend=$activeBackend mode=NEXT_WORD context=${cleanContext.takeLast(80)}"
+            "Inference START backend=$activeBackend context=${cleanContext.takeLast(80)}"
         )
 
         val start =
@@ -253,215 +246,35 @@ class KeyboardLlm(
 
         val predictions =
             currentEngine
-                .createConversation(
-                    config
-                )
+                .createConversation(config)
                 .use { conversation ->
 
                     /*
-                     * Deliberately no example answers here.
+                     * IMPORTANT:
                      *
-                     * Tiny models can copy example candidates instead
-                     * of actually predicting from the user's context.
+                     * No "Next:" suffix here.
+                     * Qwen was copying that marker into its output.
                      */
                     val response =
                         conversation.sendMessage(
-                            """
-                            Text before cursor:
-                            $cleanContext
-                            """.trimIndent(),
-                            maxOutputToken =
-                                MAX_OUTPUT_TOKENS
+                            "Context: $cleanContext",
+                            maxOutputToken = MAX_OUTPUT_TOKENS
                         )
 
                     parsePredictions(
-                        rawResponse =
-                            response.toString(),
-
-                        requiredPrefix =
-                            null
+                        response.toString()
                     )
                 }
 
         val elapsed =
-            SystemClock.elapsedRealtime() -
-                start
+            SystemClock.elapsedRealtime() - start
 
         Log.i(
             TAG,
             "Inference DONE backend=$activeBackend time=${elapsed}ms predictions=$predictions"
         )
 
-        val sanitized =
-            sanitizeNextWordPredictions(
-                predictions = predictions,
-                context = cleanContext
-            )
-
-        if (
-            predictions != sanitized
-        ) {
-            Log.w(
-                TAG,
-                "Filtered malformed predictions raw=$predictions clean=$sanitized"
-            )
-        }
-
-        return sanitized
-    }
-
-    /**
-     * Reject malformed tiny-model output before it reaches the
-     * suggestion strip.
-     *
-     * Examples rejected:
-     *
-     * how are             -> howare
-     * how are you         -> howareyouhowareyou...
-     * here are the        -> herearethe
-     */
-    private fun sanitizeNextWordPredictions(
-        predictions: List<String>,
-        context: String
-    ): List<String> {
-
-        val wordRegex =
-            Regex(
-                "[\\p{L}]+(?:['’\\-][\\p{L}]+)*"
-            )
-
-        val contextWords =
-            wordRegex
-                .findAll(
-                    context.lowercase(
-                        java.util.Locale.ROOT
-                    )
-                )
-                .map {
-                    it.value
-                }
-                .toList()
-
-        fun compact(
-            value: String
-        ): String {
-
-            return value
-                .lowercase(
-                    java.util.Locale.ROOT
-                )
-                .replace(
-                    Regex("[^\\p{L}]"),
-                    ""
-                )
-        }
-
-        val compactWords =
-            contextWords.map {
-                compact(it)
-            }
-
         return predictions
-            .asSequence()
-            .map {
-                it.trim()
-            }
-            .filter {
-                candidate ->
-
-                if (
-                    candidate.isEmpty()
-                ) {
-                    return@filter false
-                }
-
-                if (
-                    "--" in candidate ||
-                    "__" in candidate
-                ) {
-                    return@filter false
-                }
-
-                val candidateCompact =
-                    compact(candidate)
-
-                if (
-                    candidateCompact.isEmpty() ||
-                    candidateCompact.length > 24
-                ) {
-                    return@filter false
-                }
-
-                /*
-                 * Reject repetition of the immediately preceding word.
-                 */
-                val lastWord =
-                    compactWords.lastOrNull()
-
-                if (
-                    lastWord != null &&
-                    candidateCompact.length >= 4 &&
-                    candidateCompact == lastWord
-                ) {
-                    return@filter false
-                }
-
-                /*
-                 * Reject concatenated copies of the recent context.
-                 */
-                val maxWindow =
-                    minOf(
-                        6,
-                        compactWords.size
-                    )
-
-                for (
-                    count in 2..maxWindow
-                ) {
-
-                    val recent =
-                        compactWords
-                            .takeLast(count)
-                            .joinToString("")
-
-                    if (
-                        recent.length < 4
-                    ) {
-                        continue
-                    }
-
-                    if (
-                        candidateCompact ==
-                        recent
-                    ) {
-                        return@filter false
-                    }
-
-                    /*
-                     * Also catches:
-                     *
-                     * howareyouhowareyouhowareyou
-                     */
-                    if (
-                        candidateCompact.startsWith(
-                            recent
-                        ) &&
-                        candidateCompact.length >
-                        recent.length
-                    ) {
-                        return@filter false
-                    }
-                }
-
-                true
-            }
-            .distinctBy {
-                it.lowercase(
-                    java.util.Locale.ROOT
-                )
-            }
-            .take(3)
-            .toList()
     }
 
     // =========================================================
@@ -469,105 +282,33 @@ class KeyboardLlm(
     // =========================================================
 
     private fun parsePredictions(
-        rawResponse: String,
-        requiredPrefix: String?
+        rawResponse: String
     ): List<String> {
 
         return rawResponse
-
             /*
-             * Expected:
+             * Accept both:
              *
-             * hello|help|helmet
+             * hello|there|everyone
              *
-             * Newlines are tolerated because small models sometimes
-             * ignore formatting instructions.
+             * and badly formatted multiline responses.
              */
             .split(
-                Regex("[|\n\r]+")
+                Regex("[|\\n\\r]+")
             )
-
             .map { candidate ->
 
-                cleanCandidate(
-                    candidate
-                )
+                cleanCandidate(candidate)
             }
-
-            /*
-             * Remove harmless punctuation / markdown that a model may
-             * wrap around an otherwise valid word.
-             */
-            .map { candidate ->
-
-                candidate
-                    .trim()
-                    .trim(
-                        '`',
-                        '*',
-                        '"',
-                        '\'',
-                        ',',
-                        '.',
-                        ';',
-                        ':',
-                        '!',
-                        '?'
-                    )
-                    .trim()
-            }
-
-            /*
-             * A suggestion-strip candidate must be a WORD,
-             * not another generated sentence.
-             */
             .filter { candidate ->
 
                 candidate.isNotBlank() &&
-                        candidate.length <= 32 &&
-                        candidate.matches(
-                            Regex(
-                                "^[\\p{L}][\\p{L}'’-]*$"
-                            )
-                        ) &&
-                        !isGarbageCandidate(
-                            candidate
-                        )
+                        !isGarbageCandidate(candidate)
             }
-
-            /*
-             * During completion:
-             *
-             * typed "hel"
-             *
-             * accept:
-             * hello
-             * help
-             * helmet
-             *
-             * reject:
-             * world
-             * hel
-             */
-            .filter { candidate ->
-
-                requiredPrefix == null ||
-                        (
-                            candidate.length >
-                                    requiredPrefix.length &&
-
-                                    candidate.startsWith(
-                                        requiredPrefix,
-                                        ignoreCase = true
-                                    )
-                            )
-            }
-
             .distinctBy { candidate ->
 
                 candidate.lowercase()
             }
-
             .take(3)
     }
 

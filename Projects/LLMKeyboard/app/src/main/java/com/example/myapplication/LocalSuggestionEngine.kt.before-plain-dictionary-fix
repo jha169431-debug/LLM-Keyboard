@@ -1,0 +1,451 @@
+package com.example.myapplication
+
+import android.content.res.AssetManager
+import android.util.Log
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.util.Locale
+import java.util.zip.GZIPInputStream
+
+/**
+ * Fast offline word-completion engine.
+ *
+ * Reads the AOSP LatinIME .combined.gz dictionary directly.
+ *
+ * This engine intentionally handles only current-word completion.
+ * Contextual next-word prediction remains the job of KeyboardLlm.
+ */
+class LocalSuggestionEngine(
+    private val assets: AssetManager
+) {
+
+    companion object {
+
+        private const val TAG =
+            "LLMKeyboard"
+
+        private const val DICTIONARY_ASSET =
+            "dictionaries/en_wordlist.combined.gz"
+    }
+
+    private data class WordEntry(
+        val word: String,
+        val normalized: String,
+        val frequency: Int
+    )
+
+    @Volatile
+    private var loadedEntries:
+        List<WordEntry>? = null
+
+    private val loadLock =
+        Any()
+
+    // =========================================================
+    // PUBLIC API
+    // =========================================================
+
+    fun suggest(
+        prefix: String,
+        limit: Int = 3
+    ): List<String> {
+
+        if (limit <= 0) {
+            return emptyList()
+        }
+
+        val cleanPrefix =
+            prefix.trim()
+
+        if (cleanPrefix.isEmpty()) {
+            return emptyList()
+        }
+
+        val normalizedPrefix =
+            cleanPrefix.lowercase(
+                Locale.ROOT
+            )
+
+        val dictionary =
+            ensureLoaded()
+
+        if (dictionary.isEmpty()) {
+            return emptyList()
+        }
+
+        /*
+         * Because entries are sorted alphabetically by normalized
+         * spelling, jump directly to the first possible match.
+         */
+        val startIndex =
+            lowerBound(
+                dictionary,
+                normalizedPrefix
+            )
+
+        if (startIndex >= dictionary.size) {
+            return emptyList()
+        }
+
+        val matches =
+            ArrayList<WordEntry>()
+
+        var index =
+            startIndex
+
+        while (index < dictionary.size) {
+
+            val entry =
+                dictionary[index]
+
+            if (
+                !entry.normalized.startsWith(
+                    normalizedPrefix
+                )
+            ) {
+                break
+            }
+
+            /*
+             * Do not suggest exactly what has already been typed.
+             */
+            if (
+                entry.normalized !=
+                normalizedPrefix
+            ) {
+                matches.add(
+                    entry
+                )
+            }
+
+            index++
+        }
+
+        /*
+         * AOSP frequency is 0..255.
+         *
+         * Prefer:
+         *
+         * 1. higher-frequency words
+         * 2. shorter completions
+         * 3. alphabetical order as stable tie-breaker
+         */
+        return matches
+            .sortedWith(
+                compareByDescending<WordEntry> {
+                    it.frequency
+                }
+                    .thenBy {
+                        it.word.length
+                    }
+                    .thenBy {
+                        it.normalized
+                    }
+            )
+            .asSequence()
+            .map { entry ->
+
+                applyTypedCapitalization(
+                    typedPrefix =
+                        cleanPrefix,
+
+                    suggestion =
+                        entry.word
+                )
+            }
+            .distinctBy {
+                it.lowercase(
+                    Locale.ROOT
+                )
+            }
+            .take(
+                limit
+            )
+            .toList()
+    }
+
+    // =========================================================
+    // LOAD AOSP DICTIONARY
+    // =========================================================
+
+    private fun ensureLoaded():
+        List<WordEntry> {
+
+        loadedEntries
+            ?.let {
+                return it
+            }
+
+        synchronized(
+            loadLock
+        ) {
+
+            loadedEntries
+                ?.let {
+                    return it
+                }
+
+            val start =
+                android.os.SystemClock
+                    .elapsedRealtime()
+
+            val bestEntries =
+                HashMap<String, WordEntry>()
+
+            assets
+                .open(
+                    DICTIONARY_ASSET
+                )
+                .use { rawInput ->
+
+                    GZIPInputStream(
+                        rawInput
+                    )
+                        .use { gzipInput ->
+
+                            BufferedReader(
+                                InputStreamReader(
+                                    gzipInput,
+                                    Charsets.UTF_8
+                                ),
+                                64 * 1024
+                            )
+                                .useLines { lines ->
+
+                                    lines.forEach { rawLine ->
+
+                                        parseWordEntry(
+                                            rawLine
+                                        )
+                                            ?.let { entry ->
+
+                                                val previous =
+                                                    bestEntries[
+                                                        entry.normalized
+                                                    ]
+
+                                                if (
+                                                    previous == null ||
+                                                    entry.frequency >
+                                                    previous.frequency
+                                                ) {
+                                                    bestEntries[
+                                                        entry.normalized
+                                                    ] =
+                                                        entry
+                                                }
+                                            }
+                                    }
+                                }
+                        }
+                }
+
+            val entries =
+                bestEntries
+                    .values
+                    .sortedBy {
+                        it.normalized
+                    }
+
+            loadedEntries =
+                entries
+
+            val elapsed =
+                android.os.SystemClock
+                    .elapsedRealtime() -
+                        start
+
+            Log.i(
+                TAG,
+                "Local dictionary loaded: ${entries.size} words in ${elapsed}ms"
+            )
+
+            return entries
+        }
+    }
+
+    // =========================================================
+    // PARSE ONE AOSP WORD ENTRY
+    // =========================================================
+
+    private fun parseWordEntry(
+        rawLine: String
+    ): WordEntry? {
+
+        val line =
+            rawLine.trim()
+
+        if (
+            !line.startsWith(
+                "word="
+            )
+        ) {
+            return null
+        }
+
+        /*
+         * Skip dictionary entries that are explicitly marked as
+         * not real words.
+         */
+        if (
+            line.contains(
+                "not_a_word=true"
+            )
+        ) {
+            return null
+        }
+
+        val frequencyMatch =
+            Regex(
+                "(?:^|,)f=(\\d+)(?:,|$)"
+            )
+                .find(
+                    line
+                )
+                ?: return null
+
+        val frequency =
+            frequencyMatch
+                .groupValues[1]
+                .toIntOrNull()
+                ?: return null
+
+        /*
+         * AOSP frequency 0 represents entries that should not be
+         * explicitly suggested.
+         */
+        if (frequency <= 0) {
+            return null
+        }
+
+        val frequencyMarker =
+            line.indexOf(
+                ",f="
+            )
+
+        if (frequencyMarker <= 5) {
+            return null
+        }
+
+        val word =
+            line
+                .substring(
+                    startIndex = 5,
+                    endIndex = frequencyMarker
+                )
+                .trim()
+
+        if (word.isEmpty()) {
+            return null
+        }
+
+        /*
+         * Keep this MVP focused on words useful in a normal
+         * suggestion strip.
+         */
+        if (
+            word.length > 48
+        ) {
+            return null
+        }
+
+        val normalized =
+            word.lowercase(
+                Locale.ROOT
+            )
+
+        return WordEntry(
+            word = word,
+            normalized = normalized,
+            frequency = frequency
+        )
+    }
+
+    // =========================================================
+    // BINARY SEARCH
+    // =========================================================
+
+    private fun lowerBound(
+        entries: List<WordEntry>,
+        prefix: String
+    ): Int {
+
+        var low =
+            0
+
+        var high =
+            entries.size
+
+        while (low < high) {
+
+            val middle =
+                (low + high) ushr 1
+
+            if (
+                entries[middle]
+                    .normalized <
+                prefix
+            ) {
+
+                low =
+                    middle + 1
+
+            } else {
+
+                high =
+                    middle
+            }
+        }
+
+        return low
+    }
+
+    // =========================================================
+    // CAPITALIZATION
+    // =========================================================
+
+    private fun applyTypedCapitalization(
+        typedPrefix: String,
+        suggestion: String
+    ): String {
+
+        if (
+            typedPrefix.length >= 2 &&
+            typedPrefix.all {
+                !it.isLetter() ||
+                it.isUpperCase()
+            }
+        ) {
+
+            return suggestion.uppercase(
+                Locale.ROOT
+            )
+        }
+
+        if (
+            typedPrefix
+                .firstOrNull()
+                ?.isUpperCase() == true
+        ) {
+
+            return suggestion
+                .replaceFirstChar { character ->
+
+                    if (
+                        character.isLowerCase()
+                    ) {
+
+                        character.titlecase(
+                            Locale.ROOT
+                        )
+
+                    } else {
+
+                        character.toString()
+                    }
+                }
+        }
+
+        return suggestion
+    }
+}

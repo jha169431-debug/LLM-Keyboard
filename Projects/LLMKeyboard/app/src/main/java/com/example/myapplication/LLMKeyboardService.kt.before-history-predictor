@@ -65,14 +65,6 @@ class LLMKeyboardService : InputMethodService() {
 
     private var llmInitStarted = false
 
-    private val userHistoryPredictor by lazy(
-        LazyThreadSafetyMode.SYNCHRONIZED
-    ) {
-        UserHistoryPredictor(
-            this
-        )
-    }
-
     // =========================================================
     // PREDICTION PIPELINE
     // =========================================================
@@ -906,41 +898,6 @@ class LLMKeyboardService : InputMethodService() {
                 }
 
                 // =================================================
-                // PERSONAL NEXT-WORD HISTORY
-                // =================================================
-
-                val learnedNextWords =
-                    userHistoryPredictor
-                        .suggest(
-                            previousWord =
-                                previousWord,
-
-                            limit =
-                                3
-                        )
-
-                if (
-                    learnedNextWords.isNotEmpty()
-                ) {
-
-                    Log.d(
-                        TAG,
-                        "HISTORY NEXT WORD previous=$previousWord suggestions=$learnedNextWords"
-                    )
-
-                    withContext(
-                        Dispatchers.Main
-                    ) {
-
-                        showSuggestions(
-                            learnedNextWords
-                        )
-                    }
-
-                    return@launch
-                }
-
-                // =================================================
                 // QWEN FALLBACK
                 // =================================================
 
@@ -1205,31 +1162,6 @@ class LLMKeyboardService : InputMethodService() {
             connection.endBatchEdit()
         }
 
-        // =================================================
-        // LEARN AFTER SUGGESTION COMMIT
-        // =================================================
-
-        /*
-         * insertSuggestion() adds its own trailing space, so this path
-         * bypasses the physical SPACE key.
-         *
-         * Learn the completed word pair here as well.
-         */
-        val textAfterSuggestion =
-            currentInputConnection
-                ?.getTextBeforeCursor(
-                    CONTEXT_LENGTH,
-                    0
-                )
-                ?.toString()
-                .orEmpty()
-                .trimEnd()
-
-        userHistoryPredictor
-            .learnFromText(
-                textAfterSuggestion
-            )
-
         clearSuggestions()
 
         /*
@@ -1418,33 +1350,10 @@ class LLMKeyboardService : InputMethodService() {
             )
 
             currentInputConnection
-                ?.let { connection ->
-
-                    val beforeSpace =
-                        connection
-                            .getTextBeforeCursor(
-                                CONTEXT_LENGTH,
-                                0
-                            )
-                            ?.toString()
-                            .orEmpty()
-
-                    /*
-                     * Learn only on an explicit word boundary.
-                     *
-                     * This prevents repeated schedulePrediction()
-                     * calls from artificially increasing counts.
-                     */
-                    userHistoryPredictor
-                        .learnFromText(
-                            beforeSpace
-                        )
-
-                    connection.commitText(
-                        " ",
-                        1
-                    )
-                }
+                ?.commitText(
+                    " ",
+                    1
+                )
 
             /*
              * Space is a strong prediction boundary,

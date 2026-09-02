@@ -27,7 +27,7 @@ class LLMKeyboardService : InputMethodService() {
         private const val TAG = "LLMKeyboard"
 
         // Wait after typing stops before requesting a prediction.
-        private const val PREDICTION_DELAY_MS = 60L
+        private const val PREDICTION_DELAY_MS = 650L
 
         // Maximum text before cursor sent to Qwen.
         private const val CONTEXT_LENGTH = 256
@@ -49,29 +49,7 @@ class LLMKeyboardService : InputMethodService() {
     @Volatile
     private var llmReady = false
 
-    /*
-     * Fast AOSP dictionary path for per-keystroke completion.
-     *
-     * The dictionary is loaded lazily on a background coroutine
-     * the first time suggestions are requested.
-     */
-    private val localSuggestionEngine by lazy(
-        LazyThreadSafetyMode.SYNCHRONIZED
-    ) {
-        LocalSuggestionEngine(
-            assets
-        )
-    }
-
     private var llmInitStarted = false
-
-    private val userHistoryPredictor by lazy(
-        LazyThreadSafetyMode.SYNCHRONIZED
-    ) {
-        UserHistoryPredictor(
-            this
-        )
-    }
 
     // =========================================================
     // PREDICTION PIPELINE
@@ -330,173 +308,56 @@ class LLMKeyboardService : InputMethodService() {
                 "models/model.litertlm"
             )
 
+        Log.d(
+            TAG,
+            "Model path: ${modelFile.absolutePath}"
+        )
+
+        Log.d(
+            TAG,
+            "Model exists: ${modelFile.exists()}"
+        )
+
+        Log.d(
+            TAG,
+            "Model size: ${modelFile.length()} bytes"
+        )
+
+        if (
+            !modelFile.exists() ||
+            modelFile.length() == 0L
+        ) {
+
+            Log.e(
+                TAG,
+                "Model file missing or empty"
+            )
+
+            llmInitStarted = false
+
+            showLlmStatus(
+                "AI unavailable"
+            )
+
+            return
+        }
+
+        keyboardLlm =
+            KeyboardLlm(
+                modelFile.absolutePath
+            )
+
         llmScope.launch {
 
             try {
-
-                /*
-                 * The model is packaged inside:
-                 *
-                 * assets/models/model.litertlm
-                 *
-                 * LiteRT-LM needs a real filesystem path, so copy it
-                 * into app-private storage the first time the IME runs.
-                 *
-                 * The 347 MB copy happens on Dispatchers.IO so the
-                 * keyboard UI is not frozen.
-                 */
-                withContext(
-                    Dispatchers.IO
-                ) {
-
-                    val modelDirectory =
-                        modelFile.parentFile
-                            ?: throw IllegalStateException(
-                                "Model directory unavailable"
-                            )
-
-                    if (
-                        !modelDirectory.exists() &&
-                        !modelDirectory.mkdirs()
-                    ) {
-                        throw IllegalStateException(
-                            "Unable to create model directory: ${modelDirectory.absolutePath}"
-                        )
-                    }
-
-                    if (
-                        !modelFile.exists() ||
-                        modelFile.length() == 0L
-                    ) {
-
-                        Log.i(
-                            TAG,
-                            "Bundled model not installed yet. Copying asset..."
-                        )
-
-                        val temporaryFile =
-                            File(
-                                modelDirectory,
-                                "model.litertlm.tmp"
-                            )
-
-                        if (temporaryFile.exists()) {
-                            temporaryFile.delete()
-                        }
-
-                        assets
-                            .open(
-                                "models/model.litertlm"
-                            )
-                            .use { input ->
-
-                                temporaryFile
-                                    .outputStream()
-                                    .buffered(
-                                        1024 * 1024
-                                    )
-                                    .use { output ->
-
-                                        input.copyTo(
-                                            output,
-                                            1024 * 1024
-                                        )
-                                    }
-                            }
-
-                        if (
-                            !temporaryFile.exists() ||
-                            temporaryFile.length() == 0L
-                        ) {
-                            temporaryFile.delete()
-
-                            throw IllegalStateException(
-                                "Bundled model copy produced an empty file"
-                            )
-                        }
-
-                        /*
-                         * Never expose a half-copied model as the final
-                         * model file. Install the completed temp file
-                         * atomically when possible.
-                         */
-                        if (
-                            modelFile.exists() &&
-                            !modelFile.delete()
-                        ) {
-                            temporaryFile.delete()
-
-                            throw IllegalStateException(
-                                "Unable to replace existing model"
-                            )
-                        }
-
-                        if (
-                            !temporaryFile.renameTo(
-                                modelFile
-                            )
-                        ) {
-
-                            temporaryFile.copyTo(
-                                target = modelFile,
-                                overwrite = true
-                            )
-
-                            temporaryFile.delete()
-                        }
-
-                        Log.i(
-                            TAG,
-                            "Bundled model copied successfully: ${modelFile.length()} bytes"
-                        )
-
-                    } else {
-
-                        Log.d(
-                            TAG,
-                            "Using existing model copy"
-                        )
-                    }
-                }
-
-                Log.d(
-                    TAG,
-                    "Model path: ${modelFile.absolutePath}"
-                )
-
-                Log.d(
-                    TAG,
-                    "Model exists: ${modelFile.exists()}"
-                )
-
-                Log.d(
-                    TAG,
-                    "Model size: ${modelFile.length()} bytes"
-                )
-
-                if (
-                    !modelFile.exists() ||
-                    modelFile.length() == 0L
-                ) {
-                    throw IllegalStateException(
-                        "Model file missing or empty after asset installation"
-                    )
-                }
-
-                val llm =
-                    KeyboardLlm(
-                        modelFile.absolutePath
-                    )
-
-                keyboardLlm =
-                    llm
 
                 Log.i(
                     TAG,
                     "Initializing Qwen..."
                 )
 
-                llm.initialize()
+                keyboardLlm
+                    ?.initialize()
 
                 llmReady = true
 
@@ -666,20 +527,19 @@ class LLMKeyboardService : InputMethodService() {
         delayMs: Long = PREDICTION_DELAY_MS
     ) {
 
-        /*
-         * Any new keystroke invalidates the suggestion generation
-         * that was previously visible.
-         */
+        if (!llmReady) {
+            return
+        }
+
         predictionGeneration++
 
         val generation =
             predictionGeneration
 
         /*
-         * Cancel only the waiting debounce.
+         * Cancel ONLY the waiting debounce timer.
          *
-         * Never cancel an already-running LiteRT-LM inference.
-         * predictionGeneration will reject stale model output.
+         * Do not cancel predictionWorkerJob.
          */
         debounceJob
             ?.cancel()
@@ -692,7 +552,7 @@ class LLMKeyboardService : InputMethodService() {
                 )
 
                 /*
-                 * InputConnection access belongs on Main.
+                 * InputConnection should be queried from Main.
                  */
                 val context =
                     withContext(
@@ -726,267 +586,16 @@ class LLMKeyboardService : InputMethodService() {
                     return@launch
                 }
 
-                /*
-                 * Determine whether the cursor is inside a word.
-                 *
-                 * Examples:
-                 *
-                 * "hel"             -> "hel"
-                 * "I need hel"      -> "hel"
-                 * "I need help "    -> ""
-                 */
-                val currentWord =
-                    context.takeLastWhile { character ->
-
-                        character.isLetter() ||
-                                character == '\'' ||
-                                character == '-' ||
-                                character == '’'
-                    }
-
-                // =================================================
-                // FAST LOCAL COMPLETION
-                // =================================================
-
-                if (
-                    currentWord.isNotEmpty()
-                ) {
-
-                    val suggestions =
-                        try {
-
-                            withContext(
-                                Dispatchers.Default
-                            ) {
-
-                                localSuggestionEngine
-                                    .suggest(
-                                        prefix =
-                                            currentWord,
-
-                                        limit =
-                                            3
-                                    )
-                            }
-
-                        } catch (e: CancellationException) {
-
-                            throw e
-
-                        } catch (e: Exception) {
-
-                            Log.e(
-                                TAG,
-                                "Local suggestion lookup failed",
-                                e
-                            )
-
-                            emptyList()
-                        }
-
-                    /*
-                     * User typed again while dictionary lookup was
-                     * running.
-                     */
-                    if (
-                        generation !=
-                        predictionGeneration
-                    ) {
-
-                        return@launch
-                    }
-
-                    Log.d(
-                        TAG,
-                        "LOCAL SUGGESTIONS prefix=$currentWord suggestions=$suggestions"
-                    )
-
-                    withContext(
-                        Dispatchers.Main
-                    ) {
-
-                        showSuggestions(
-                            suggestions
-                        )
-                    }
-
-                    return@launch
-                }
-
-                // =================================================
-                // FAST LOCAL NEXT-WORD PREDICTION
-                // =================================================
-
-                val previousWord =
-                    context
-                        .trimEnd()
-                        .takeLastWhile { character ->
-
-                            character.isLetter() ||
-                                    character == '\'' ||
-                                    character == '-' ||
-                                    character == '’'
-                        }
-
-                val localNextWords =
-                    if (
-                        previousWord.isNotEmpty()
-                    ) {
-
-                        try {
-
-                            withContext(
-                                Dispatchers.Default
-                            ) {
-
-                                localSuggestionEngine
-                                    .nextWords(
-                                        previousWord =
-                                            previousWord,
-
-                                        limit =
-                                            3
-                                    )
-                            }
-
-                        } catch (
-                            e: CancellationException
-                        ) {
-
-                            throw e
-
-                        } catch (
-                            e: Exception
-                        ) {
-
-                            Log.e(
-                                TAG,
-                                "Local next-word lookup failed",
-                                e
-                            )
-
-                            emptyList()
-                        }
-
-                    } else {
-
-                        emptyList()
-                    }
-
-                if (
-                    generation !=
-                    predictionGeneration
-                ) {
-                    return@launch
-                }
-
-                if (
-                    localNextWords.isNotEmpty()
-                ) {
-
-                    Log.d(
-                        TAG,
-                        "LOCAL NEXT WORD previous=$previousWord suggestions=$localNextWords"
-                    )
-
-                    withContext(
-                        Dispatchers.Main
-                    ) {
-
-                        showSuggestions(
-                            localNextWords
-                        )
-                    }
-
-                    /*
-                     * Fast dictionary prediction wins.
-                     * Qwen becomes fallback only.
-                     */
-                    return@launch
-                }
-
-                // =================================================
-                // PERSONAL NEXT-WORD HISTORY
-                // =================================================
-
-                val learnedNextWords =
-                    userHistoryPredictor
-                        .suggest(
-                            previousWord =
-                                previousWord,
-
-                            limit =
-                                3
-                        )
-
-                if (
-                    learnedNextWords.isNotEmpty()
-                ) {
-
-                    Log.d(
-                        TAG,
-                        "HISTORY NEXT WORD previous=$previousWord suggestions=$learnedNextWords"
-                    )
-
-                    withContext(
-                        Dispatchers.Main
-                    ) {
-
-                        showSuggestions(
-                            learnedNextWords
-                        )
-                    }
-
-                    return@launch
-                }
-
-                // =================================================
-                // QWEN FALLBACK
-                // =================================================
-
-                /*
-                 * Qwen is intentionally used only at a word boundary.
-                 *
-                 * Example:
-                 *
-                 * "I need some "
-                 *
-                 * This keeps expensive ~500 ms inference away from
-                 * normal per-letter typing.
-                 */
-                if (!llmReady) {
-
-                    Log.d(
-                        TAG,
-                        "Skipping contextual prediction: LLM not ready"
-                    )
-
-                    withContext(
-                        Dispatchers.Main
-                    ) {
-
-                        if (
-                            generation ==
-                            predictionGeneration
-                        ) {
-
-                            clearSuggestions()
-                        }
-                    }
-
-                    return@launch
-                }
-
                 Log.d(
                     TAG,
-                    "Queued contextual prediction: ${
+                    "Queued prediction: ${
                         context.takeLast(80)
                     }"
                 )
 
                 /*
-                 * Channel.CONFLATED keeps only the newest pending
-                 * contextual request while Qwen is busy.
+                 * If Qwen is busy, Channel.CONFLATED replaces the
+                 * pending request with this newest one.
                  */
                 val result =
                     predictionRequests.trySend(
@@ -996,13 +605,11 @@ class LLMKeyboardService : InputMethodService() {
                         )
                     )
 
-                if (
-                    result.isFailure
-                ) {
+                if (result.isFailure) {
 
                     Log.w(
                         TAG,
-                        "Unable to queue contextual prediction"
+                        "Unable to queue prediction"
                     )
                 }
             }
@@ -1205,31 +812,6 @@ class LLMKeyboardService : InputMethodService() {
             connection.endBatchEdit()
         }
 
-        // =================================================
-        // LEARN AFTER SUGGESTION COMMIT
-        // =================================================
-
-        /*
-         * insertSuggestion() adds its own trailing space, so this path
-         * bypasses the physical SPACE key.
-         *
-         * Learn the completed word pair here as well.
-         */
-        val textAfterSuggestion =
-            currentInputConnection
-                ?.getTextBeforeCursor(
-                    CONTEXT_LENGTH,
-                    0
-                )
-                ?.toString()
-                .orEmpty()
-                .trimEnd()
-
-        userHistoryPredictor
-            .learnFromText(
-                textAfterSuggestion
-            )
-
         clearSuggestions()
 
         /*
@@ -1418,33 +1000,10 @@ class LLMKeyboardService : InputMethodService() {
             )
 
             currentInputConnection
-                ?.let { connection ->
-
-                    val beforeSpace =
-                        connection
-                            .getTextBeforeCursor(
-                                CONTEXT_LENGTH,
-                                0
-                            )
-                            ?.toString()
-                            .orEmpty()
-
-                    /*
-                     * Learn only on an explicit word boundary.
-                     *
-                     * This prevents repeated schedulePrediction()
-                     * calls from artificially increasing counts.
-                     */
-                    userHistoryPredictor
-                        .learnFromText(
-                            beforeSpace
-                        )
-
-                    connection.commitText(
-                        " ",
-                        1
-                    )
-                }
+                ?.commitText(
+                    " ",
+                    1
+                )
 
             /*
              * Space is a strong prediction boundary,
