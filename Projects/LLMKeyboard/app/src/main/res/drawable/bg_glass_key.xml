@@ -2,29 +2,45 @@
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
 
     <item android:state_pressed="true">
-        <shape android:shape="rectangle">
-            <gradient
-                android:angle="270"
-                android:startColor="@color/kb_key_pressed_top"
-                android:endColor="@color/kb_key_pressed_bottom" />
-            <stroke
-                android:width="1dp"
-                android:color="@color/kb_key_border" />
-            <corners android:radius="7dp" />
-        </shape>
+        <layer-list>
+
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="#AEB2B8" />
+                    <corners android:radius="6dp" />
+                </shape>
+            </item>
+
+            <item android:bottom="1dp">
+                <shape android:shape="rectangle">
+                    <solid android:color="#D9DBDF" />
+                    <corners android:radius="6dp" />
+                </shape>
+            </item>
+
+        </layer-list>
     </item>
 
     <item>
-        <shape android:shape="rectangle">
-            <gradient
-                android:angle="270"
-                android:startColor="@color/kb_key_top"
-                android:endColor="@color/kb_key_bottom" />
-            <stroke
-                android:width="1dp"
-                android:color="@color/kb_key_border" />
-            <corners android:radius="7dp" />
-        </shape>
+        <layer-list>
+
+            <!-- subtle key shadow -->
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="#B9BDC3" />
+                    <corners android:radius="6dp" />
+                </shape>
+            </item>
+
+            <!-- actual white key cap -->
+            <item android:bottom="1dp">
+                <shape android:shape="rectangle">
+                    <solid android:color="#FAFAFB" />
+                    <corners android:radius="6dp" />
+                </shape>
+            </item>
+
+        </layer-list>
     </item>
 
 </selector>

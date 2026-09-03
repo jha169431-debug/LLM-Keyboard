@@ -1750,10 +1750,10 @@ class LLMKeyboardService : InputMethodService() {
             }
 
             button.setPadding(
-                0,
-                0,
-                0,
-                0
+                dp(4),
+                dp(4),
+                dp(4),
+                dp(4)
             )
 
             button.scaleType =
@@ -1761,13 +1761,12 @@ class LLMKeyboardService : InputMethodService() {
                     .ScaleType
                     .CENTER_INSIDE
 
-            button.setBackgroundColor(
-                Color.rgb(
-                    37,
-                    40,
-                    45
-                )
+            button.setBackgroundResource(
+                R.drawable.bg_emoji_cell
             )
+
+            button.backgroundTintList =
+                null
 
             val density =
                 resources
@@ -1781,7 +1780,7 @@ class LLMKeyboardService : InputMethodService() {
             params.width = 0
 
             params.height =
-                (44 * density)
+                (43 * density)
                     .toInt()
 
             params.columnSpec =
@@ -1791,7 +1790,7 @@ class LLMKeyboardService : InputMethodService() {
                 )
 
             val margin =
-                (1 * density)
+                (2 * density)
                     .toInt()
 
             params.setMargins(

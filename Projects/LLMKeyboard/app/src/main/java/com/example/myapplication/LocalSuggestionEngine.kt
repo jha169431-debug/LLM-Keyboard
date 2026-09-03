@@ -15,6 +15,62 @@ class LocalSuggestionEngine(
         private const val TAG = "LLMKeyboard"
         private const val DICTIONARY_ASSET =
             "dictionaries/en_wordlist.combined"
+
+        /*
+         * AOSP frequency alone tends to over-rank dictionary-ish words.
+         * These are modest priors for extremely common keyboard words.
+         *
+         * This is NOT a replacement dictionary; it only nudges ranking.
+         */
+        private val COMMON_WORD_PRIOR =
+            mapOf(
+                "the" to 1400,
+                "to" to 1350,
+                "and" to 1300,
+                "you" to 1300,
+                "your" to 1150,
+                "yes" to 900,
+                "is" to 1200,
+                "are" to 1150,
+                "was" to 1050,
+                "were" to 950,
+                "this" to 1100,
+                "that" to 1100,
+                "there" to 900,
+                "here" to 950,
+                "have" to 1000,
+                "has" to 850,
+                "can" to 950,
+                "could" to 800,
+                "would" to 850,
+                "will" to 1000,
+                "with" to 1050,
+                "for" to 1100,
+                "from" to 900,
+                "not" to 1000,
+                "just" to 850,
+                "good" to 1000,
+                "great" to 800,
+                "thanks" to 1000,
+                "thank" to 950,
+                "please" to 900,
+                "hello" to 1500,
+                "help" to 1100,
+                "home" to 900,
+                "how" to 1200,
+                "what" to 1150,
+                "when" to 1000,
+                "where" to 1000,
+                "why" to 950,
+                "who" to 900,
+                "going" to 1000,
+                "want" to 900,
+                "need" to 950,
+                "know" to 950,
+                "think" to 900,
+                "like" to 950,
+                "love" to 850
+            )
     }
 
     private data class WordEntry(
@@ -87,12 +143,16 @@ class LocalSuggestionEngine(
                 break
             }
 
-            if (
-                entry.normalized !=
-                normalizedPrefix
-            ) {
-                matches.add(entry)
-            }
+            /*
+             * Keep the exact typed word too.
+             *
+             * Example:
+             *   "how" -> how | however | how's
+             *
+             * Tapping the exact word simply confirms it and inserts
+             * the trailing space through insertSuggestion().
+             */
+            matches.add(entry)
 
             index++
         }
@@ -100,8 +160,14 @@ class LocalSuggestionEngine(
         return matches
             .sortedWith(
                 compareByDescending<WordEntry> {
-                    it.frequency
+                    completionScore(
+                        entry = it,
+                        typedPrefix = normalizedPrefix
+                    )
                 }
+                    .thenByDescending {
+                        it.frequency
+                    }
                     .thenBy {
                         it.word.length
                     }
@@ -121,6 +187,79 @@ class LocalSuggestionEngine(
             }
             .take(limit)
             .toList()
+    }
+
+    // =========================================================
+    // COMPLETION RANKING
+    // =========================================================
+
+    private fun completionScore(
+        entry: WordEntry,
+        typedPrefix: String
+    ): Int {
+
+        val extraCharacters =
+            (entry.normalized.length - typedPrefix.length)
+                .coerceAtLeast(0)
+
+        /*
+         * AOSP unigram frequency remains the main signal.
+         */
+        var score =
+            entry.frequency * 10
+
+        /*
+         * Small language prior for very common keyboard vocabulary.
+         */
+        score +=
+            COMMON_WORD_PRIOR[
+                entry.normalized
+            ] ?: 0
+
+        /*
+         * Exact typed word should normally be prominent.
+         */
+        if (
+            entry.normalized ==
+            typedPrefix
+        ) {
+            score += 900
+        }
+
+        /*
+         * Prefer concise completions.
+         *
+         * hel -> hello/help
+         * rather than unnecessarily long dictionary words.
+         */
+        score -=
+            extraCharacters * 18
+
+        /*
+         * When the user is typing lowercase, reduce proper nouns,
+         * abbreviations and dictionary artifacts.
+         */
+        if (
+            typedPrefix.firstOrNull()?.isLowerCase() == true &&
+            entry.word.firstOrNull()?.isUpperCase() == true
+        ) {
+            score -= 700
+        }
+
+        /*
+         * Slight penalty for punctuation-heavy variants.
+         */
+        if (
+            entry.word.any {
+                it == '\'' ||
+                it == '’' ||
+                it == '-'
+            }
+        ) {
+            score -= 80
+        }
+
+        return score
     }
 
     // =========================================================
