@@ -34,6 +34,8 @@ class LLMKeyboardService : InputMethodService() {
     }
 
     private var isShifted = false
+    private var isSymbolsMode = false
+    private var isSecondarySymbols = false
 
     // =========================================================
     // LLM STATE
@@ -1446,7 +1448,13 @@ class LLMKeyboardService : InputMethodService() {
             button.setOnClickListener {
 
                 val output =
-                    if (
+                    if (isSymbolsMode) {
+
+                        button
+                            .text
+                            .toString()
+
+                    } else if (
                         isShifted &&
                         keyText.isNotEmpty() &&
                         keyText[0].isLetter()
@@ -1632,20 +1640,154 @@ class LLMKeyboardService : InputMethodService() {
         }
 
         // =========================
-        // SHIFT
+        // SHIFT / SYMBOL PAGE
         // =========================
 
         view.findViewById<Button>(
             R.id.key_shift
         ).setOnClickListener {
 
-            isShifted =
-                !isShifted
+            if (isSymbolsMode) {
+
+                isSecondarySymbols =
+                    !isSecondarySymbols
+
+                Log.d(
+                    TAG,
+                    "Pressed: SYMBOL PAGE -> secondary=$isSecondarySymbols"
+                )
+
+                applySymbolLabels(
+                    view
+                )
+
+            } else {
+
+                isShifted =
+                    !isShifted
+
+                Log.d(
+                    TAG,
+                    "Pressed: SHIFT -> shifted=$isShifted"
+                )
+
+                updateLetterDisplay(
+                    view,
+                    keys
+                )
+
+                updateShiftButton(
+                    view
+                )
+            }
+        }
+
+        // =========================
+        // SYMBOLS / ABC
+        // =========================
+
+        view.findViewById<Button>(
+            R.id.key_symbols
+        ).setOnClickListener {
 
             Log.d(
                 TAG,
-                "Pressed: SHIFT -> shifted=$isShifted"
+                if (isSymbolsMode) {
+                    "Pressed: ABC"
+                } else {
+                    "Pressed: SYMBOLS"
+                }
             )
+
+            setSymbolsMode(
+                view = view,
+                enabled = !isSymbolsMode,
+                keys = keys
+            )
+        }
+
+        /*
+         * Add keyboard-tap haptics after all normal click
+         * listeners have been installed.
+         */
+        enableKeyboardHaptics(
+            view
+        )
+    }
+
+    // =========================================================
+    // NUMBER / SYMBOL MODE
+    // =========================================================
+
+    private fun setSymbolsMode(
+        view: View,
+        enabled: Boolean,
+        keys: Map<Int, String>
+    ) {
+
+        isSymbolsMode =
+            enabled
+
+        isSecondarySymbols =
+            false
+
+        isShifted =
+            false
+
+        /*
+         * Number buttons already exist in keyboard_view.xml.
+         * Their parent row is simply hidden on the alphabet page.
+         */
+        val numberRow =
+            view
+                .findViewById<Button>(
+                    R.id.key_1
+                )
+                ?.parent as? View
+
+        if (enabled) {
+
+            /*
+             * Some of our UI versions stored this hidden row with
+             * zero height, so force a usable height at runtime.
+             */
+            numberRow
+                ?.layoutParams
+                ?.height =
+                dp(48)
+
+            numberRow
+                ?.visibility =
+                View.VISIBLE
+
+            numberRow
+                ?.requestLayout()
+
+            view
+                .findViewById<Button>(
+                    R.id.key_symbols
+                )
+                ?.text =
+                "ABC"
+
+            applySymbolLabels(
+                view
+            )
+
+            clearSuggestions()
+
+        } else {
+
+            numberRow
+                ?.visibility =
+                View.GONE
+
+            view
+                .findViewById<Button>(
+                    R.id.key_symbols
+                )
+                ?.text =
+                "?123"
 
             updateLetterDisplay(
                 view,
@@ -1655,24 +1797,203 @@ class LLMKeyboardService : InputMethodService() {
             updateShiftButton(
                 view
             )
-        }
 
-        // =========================
-        // SYMBOLS
-        // =========================
-
-        view.findViewById<Button>(
-            R.id.key_symbols
-        ).setOnClickListener {
-
-            Log.d(
-                TAG,
-                "Pressed: SYMBOLS"
+            schedulePrediction(
+                delayMs = 100L
             )
-
-            // TODO: symbols panel
         }
     }
+
+
+    private fun applySymbolLabels(
+        view: View
+    ) {
+
+        val labels =
+            if (!isSecondarySymbols) {
+
+                mapOf(
+
+                    // QWERTY row
+                    R.id.key_q to "@",
+                    R.id.key_w to "#",
+                    R.id.key_e to "$",
+                    R.id.key_r to "%",
+                    R.id.key_t to "&",
+                    R.id.key_y to "*",
+                    R.id.key_u to "-",
+                    R.id.key_i to "+",
+                    R.id.key_o to "(",
+                    R.id.key_p to ")",
+
+                    // ASDF row
+                    R.id.key_a to "!",
+                    R.id.key_s to "\"",
+                    R.id.key_d to "'",
+                    R.id.key_f to ":",
+                    R.id.key_g to ";",
+                    R.id.key_h to "/",
+                    R.id.key_j to "?",
+                    R.id.key_k to ",",
+                    R.id.key_l to ".",
+
+                    // ZXCV row
+                    R.id.key_z to "[",
+                    R.id.key_x to "]",
+                    R.id.key_c to "{",
+                    R.id.key_v to "}",
+                    R.id.key_b to "<",
+                    R.id.key_n to ">",
+                    R.id.key_m to "\\"
+                )
+
+            } else {
+
+                mapOf(
+
+                    // Secondary page
+                    R.id.key_q to "~",
+                    R.id.key_w to "`",
+                    R.id.key_e to "|",
+                    R.id.key_r to "•",
+                    R.id.key_t to "√",
+                    R.id.key_y to "π",
+                    R.id.key_u to "÷",
+                    R.id.key_i to "×",
+                    R.id.key_o to "§",
+                    R.id.key_p to "_",
+
+                    R.id.key_a to "£",
+                    R.id.key_s to "¥",
+                    R.id.key_d to "€",
+                    R.id.key_f to "¢",
+                    R.id.key_g to "^",
+                    R.id.key_h to "°",
+                    R.id.key_j to "©",
+                    R.id.key_k to "®",
+                    R.id.key_l to "=",
+
+                    R.id.key_z to "✓",
+                    R.id.key_x to "…",
+                    R.id.key_c to "«",
+                    R.id.key_v to "»",
+                    R.id.key_b to "≤",
+                    R.id.key_n to "≥",
+                    R.id.key_m to "≠"
+                )
+            }
+
+        for (
+        (id, label)
+        in labels
+        ) {
+
+            view
+                .findViewById<Button>(
+                    id
+                )
+                ?.text =
+                label
+        }
+
+        /*
+         * Shift position doubles as symbol-page selector.
+         */
+        view
+            .findViewById<Button>(
+                R.id.key_shift
+            )
+            ?.text =
+            if (isSecondarySymbols) {
+                "123"
+            } else {
+                "#+="
+            }
+    }
+
+
+    // =========================================================
+    // HAPTIC FEEDBACK
+    // =========================================================
+
+    private fun installKeyHaptic(
+        view: View
+    ) {
+
+        view.isHapticFeedbackEnabled =
+            true
+
+        view.setOnTouchListener {
+                touchedView,
+                event ->
+
+            if (
+                event.actionMasked ==
+                android.view.MotionEvent.ACTION_DOWN
+            ) {
+
+                val handled =
+                    touchedView
+                        .performHapticFeedback(
+                            android.view
+                                .HapticFeedbackConstants
+                                .KEYBOARD_TAP
+                        )
+
+                /*
+                 * OEM fallback if KEYBOARD_TAP isn't implemented
+                 * for this particular view.
+                 */
+                if (!handled) {
+
+                    touchedView
+                        .performHapticFeedback(
+                            android.view
+                                .HapticFeedbackConstants
+                                .VIRTUAL_KEY
+                        )
+                }
+            }
+
+            /*
+             * Never consume the touch. The existing click listener
+             * must still receive it.
+             */
+            false
+        }
+    }
+
+
+    private fun enableKeyboardHaptics(
+        root: View
+    ) {
+
+        if (
+            root is Button ||
+            root is ImageButton
+        ) {
+
+            installKeyHaptic(
+                root
+            )
+        }
+
+        if (root is ViewGroup) {
+
+            for (
+            index in
+            0 until root.childCount
+            ) {
+
+                enableKeyboardHaptics(
+                    root.getChildAt(
+                        index
+                    )
+                )
+            }
+        }
+    }
+
 
     // =========================================================
     // EMOJI PANEL
@@ -1727,6 +2048,10 @@ class LLMKeyboardService : InputMethodService() {
 
             val button =
                 ImageButton(this)
+
+            installKeyHaptic(
+                button
+            )
 
             val drawableName =
                 "emoji_%02d".format(

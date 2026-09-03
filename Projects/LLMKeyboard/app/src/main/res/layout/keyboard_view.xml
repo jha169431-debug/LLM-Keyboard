@@ -8,7 +8,7 @@
     android:paddingStart="5dp"
     android:paddingTop="5dp"
     android:paddingEnd="5dp"
-    android:paddingBottom="4dp">
+    android:paddingBottom="18dp">
 
     <!-- Keep numeric IDs available to Kotlin -->
     <LinearLayout
@@ -95,7 +95,7 @@
             android:textSize="20sp" />
     </LinearLayout>
 
-    <!-- iOS-like three-part bottom row -->
+    <!-- Main bottom row -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="52dp"
@@ -117,23 +117,8 @@
             android:textSize="14sp" />
 
         <Button
-            android:id="@+id/key_enter"
-            style="@style/KeyboardAccentKey"
-            android:layout_weight="1.65"
-            android:text="↵"
-            android:textSize="21sp" />
-    </LinearLayout>
-
-    <!-- Separate utility footer, like your reference -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="38dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
-
-        <Button
             android:id="@+id/key_emoji"
-            android:layout_width="58dp"
+            android:layout_width="52dp"
             android:layout_height="match_parent"
             android:background="@android:color/transparent"
             android:backgroundTint="@null"
@@ -147,15 +132,13 @@
             android:textAllCaps="false"
             android:stateListAnimator="@null" />
 
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="1dp"
-            android:layout_weight="1" />
+        <Button
+            android:id="@+id/key_enter"
+            style="@style/KeyboardAccentKey"
+            android:layout_weight="1.65"
+            android:text="↵"
+            android:textSize="21sp" />
 
-        <!-- intentionally empty right utility position -->
-        <Space
-            android:layout_width="58dp"
-            android:layout_height="1dp" />
     </LinearLayout>
 
 </LinearLayout>
