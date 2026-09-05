@@ -183,6 +183,8 @@ class LLMKeyboardService : InputMethodService() {
             )
         )
 
+        applyOptionalKeyboardTypeface(root)
+
         initializeLlmIfNeeded()
 
         Log.d(
@@ -1967,6 +1969,83 @@ class LLMKeyboardService : InputMethodService() {
 
 
     // =========================================================
+    // OPTIONAL LOCAL KEYBOARD FONT
+    // =========================================================
+
+    private fun optionalKeyboardTypeface():
+        android.graphics.Typeface? {
+
+        val fontId =
+            resources.getIdentifier(
+                "misans_static",
+                "font",
+                packageName
+            )
+
+        if (fontId == 0) {
+            return null
+        }
+
+        return try {
+
+            if (
+                android.os.Build.VERSION.SDK_INT >=
+                android.os.Build.VERSION_CODES.O
+            ) {
+                resources.getFont(
+                    fontId
+                )
+            } else {
+                null
+            }
+
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+
+    private fun applyOptionalKeyboardTypeface(
+        root: View
+    ) {
+
+        val typeface =
+            optionalKeyboardTypeface()
+                ?: return
+
+        applyKeyboardTypefaceRecursive(
+            root,
+            typeface
+        )
+    }
+
+
+    private fun applyKeyboardTypefaceRecursive(
+        root: View,
+        typeface: android.graphics.Typeface
+    ) {
+
+        if (root is android.widget.Button) {
+            root.typeface =
+                typeface
+        }
+
+        if (root is ViewGroup) {
+
+            for (
+                index in
+                0 until root.childCount
+            ) {
+                applyKeyboardTypefaceRecursive(
+                    root.getChildAt(index),
+                    typeface
+                )
+            }
+        }
+    }
+
+
+    // =========================================================
     // KEY PREVIEW POPUP
     // =========================================================
 
@@ -2014,10 +2093,11 @@ class LLMKeyboardService : InputMethodService() {
                 )
 
                 typeface =
-                    android.graphics.Typeface.create(
-                        "sans-serif",
-                        android.graphics.Typeface.NORMAL
-                    )
+                    optionalKeyboardTypeface()
+                        ?: android.graphics.Typeface.create(
+                            "sans-serif",
+                            android.graphics.Typeface.NORMAL
+                        )
 
                 includeFontPadding =
                     false
