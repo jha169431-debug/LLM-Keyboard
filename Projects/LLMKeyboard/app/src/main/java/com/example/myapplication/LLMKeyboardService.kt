@@ -1754,7 +1754,7 @@ class LLMKeyboardService : InputMethodService() {
             numberRow
                 ?.layoutParams
                 ?.height =
-                dp(48)
+                dp(50)
 
             numberRow
                 ?.visibility =
@@ -1780,7 +1780,7 @@ class LLMKeyboardService : InputMethodService() {
 
             numberRow
                 ?.visibility =
-                View.GONE
+                View.VISIBLE
 
             view
                 .findViewById<Button>(
