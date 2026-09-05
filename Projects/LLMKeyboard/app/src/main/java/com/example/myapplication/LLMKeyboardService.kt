@@ -1936,14 +1936,53 @@ class LLMKeyboardService : InputMethodService() {
                      */
                     touchedView.callOnClick()
 
+                    /*
+                     * Touch-position-aware physical key motion.
+                     *
+                     * Pressing near an edge tilts the key slightly toward
+                     * that side, similar to a physical key cap.
+                     */
                     touchedView.animate().cancel()
+
+                    val normalizedX =
+                        (
+                            (
+                                event.x /
+                                    touchedView.width
+                                        .coerceAtLeast(1)
+                                        .toFloat()
+                            ) - 0.5f
+                        )
+                            .times(2f)
+                            .coerceIn(-1f, 1f)
+
+                    val normalizedY =
+                        (
+                            (
+                                event.y /
+                                    touchedView.height
+                                        .coerceAtLeast(1)
+                                        .toFloat()
+                            ) - 0.5f
+                        )
+                            .times(2f)
+                            .coerceIn(-1f, 1f)
+
+                    touchedView.cameraDistance =
+                        18f *
+                            touchedView.resources
+                                .displayMetrics
+                                .density
+
                     touchedView.animate()
-                        .scaleX(0.93f)
-                        .scaleY(0.93f)
+                        .scaleX(0.92f)
+                        .scaleY(0.92f)
                         .translationY(dp(1).toFloat())
-                        .setDuration(30L)
+                        .rotationX(-normalizedY * 5f)
+                        .rotationY(normalizedX * 5f)
+                        .setDuration(32L)
                         .setInterpolator(
-                            android.view.animation.AccelerateDecelerateInterpolator()
+                            android.view.animation.DecelerateInterpolator(1.6f)
                         )
                         .start()
 
@@ -1967,9 +2006,11 @@ class LLMKeyboardService : InputMethodService() {
                         .scaleX(1.0f)
                         .scaleY(1.0f)
                         .translationY(0f)
-                        .setDuration(85L)
+                        .rotationX(0f)
+                        .rotationY(0f)
+                        .setDuration(95L)
                         .setInterpolator(
-                            android.view.animation.OvershootInterpolator(1.15f)
+                            android.view.animation.OvershootInterpolator(0.9f)
                         )
                         .start()
 
