@@ -1938,10 +1938,13 @@ class LLMKeyboardService : InputMethodService() {
 
                     touchedView.animate().cancel()
                     touchedView.animate()
-                        .scaleX(0.90f)
-                        .scaleY(0.90f)
-                        .alpha(0.78f)
-                        .setDuration(28L)
+                        .scaleX(0.93f)
+                        .scaleY(0.93f)
+                        .translationY(dp(1).toFloat())
+                        .setDuration(30L)
+                        .setInterpolator(
+                            android.view.animation.AccelerateDecelerateInterpolator()
+                        )
                         .start()
 
                     touchedView.isPressed = true
@@ -1963,8 +1966,11 @@ class LLMKeyboardService : InputMethodService() {
                     touchedView.animate()
                         .scaleX(1.0f)
                         .scaleY(1.0f)
-                        .alpha(1.0f)
-                        .setDuration(70L)
+                        .translationY(0f)
+                        .setDuration(85L)
+                        .setInterpolator(
+                            android.view.animation.OvershootInterpolator(1.15f)
+                        )
                         .start()
 
                     true
