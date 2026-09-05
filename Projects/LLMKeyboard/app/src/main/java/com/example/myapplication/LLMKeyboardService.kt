@@ -1920,46 +1920,38 @@ class LLMKeyboardService : InputMethodService() {
         view: View
     ) {
 
-        view.isHapticFeedbackEnabled =
-            true
+        view.isHapticFeedbackEnabled = true
+        view.stateListAnimator = null
 
-        view.setOnTouchListener {
-                touchedView,
-                event ->
+        view.setOnTouchListener { touchedView, event ->
 
-            if (
-                event.actionMasked ==
-                android.view.MotionEvent.ACTION_DOWN
-            ) {
+            when (event.actionMasked) {
 
-                val handled =
-                    touchedView
-                        .performHapticFeedback(
-                            android.view
-                                .HapticFeedbackConstants
-                                .KEYBOARD_TAP
-                        )
+                android.view.MotionEvent.ACTION_DOWN -> {
 
-                /*
-                 * OEM fallback if KEYBOARD_TAP isn't implemented
-                 * for this particular view.
-                 */
-                if (!handled) {
+                    touchedView.isPressed = true
+                    touchedView.jumpDrawablesToCurrentState()
 
-                    touchedView
-                        .performHapticFeedback(
-                            android.view
-                                .HapticFeedbackConstants
-                                .VIRTUAL_KEY
-                        )
+                    touchedView.performHapticFeedback(
+                        android.view.HapticFeedbackConstants.VIRTUAL_KEY
+                    )
+
+                    touchedView.callOnClick()
+
+                    true
                 }
-            }
 
-            /*
-             * Never consume the touch. The existing click listener
-             * must still receive it.
-             */
-            false
+                android.view.MotionEvent.ACTION_UP,
+                android.view.MotionEvent.ACTION_CANCEL -> {
+
+                    touchedView.isPressed = false
+                    touchedView.jumpDrawablesToCurrentState()
+
+                    true
+                }
+
+                else -> true
+            }
         }
     }
 
