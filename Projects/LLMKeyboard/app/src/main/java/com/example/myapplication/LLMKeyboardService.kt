@@ -246,7 +246,7 @@ class LLMKeyboardService : InputMethodService() {
 
                     typeface =
                         android.graphics.Typeface.create(
-                            "sans-serif-medium",
+                            "sans-serif",
                             android.graphics.Typeface.NORMAL
                         )
 
@@ -1967,6 +1967,182 @@ class LLMKeyboardService : InputMethodService() {
 
 
     // =========================================================
+    // KEY PREVIEW POPUP
+    // =========================================================
+
+    private var keyPreviewPopup:
+        android.widget.PopupWindow? = null
+
+    private fun showKeyPreview(
+        keyView: View,
+        label: String
+    ) {
+
+        if (
+            label.isBlank() ||
+            keyView.id == R.id.key_shift ||
+            keyView.id == R.id.key_backspace ||
+            keyView.id == R.id.key_symbols ||
+            keyView.id == R.id.key_space ||
+            keyView.id == R.id.key_emoji ||
+            keyView.id == R.id.key_enter
+        ) {
+            return
+        }
+
+        keyPreviewPopup
+            ?.dismiss()
+
+        val preview =
+            android.widget.TextView(this).apply {
+
+                text =
+                    label
+
+                gravity =
+                    android.view.Gravity.CENTER
+
+                textSize =
+                    30f
+
+                setTextColor(
+                    android.graphics.Color.rgb(
+                        28,
+                        31,
+                        35
+                    )
+                )
+
+                typeface =
+                    android.graphics.Typeface.create(
+                        "sans-serif",
+                        android.graphics.Typeface.NORMAL
+                    )
+
+                includeFontPadding =
+                    false
+
+                background =
+                    android.graphics.drawable
+                        .GradientDrawable()
+                        .apply {
+
+                            shape =
+                                android.graphics.drawable
+                                    .GradientDrawable.RECTANGLE
+
+                            setColor(
+                                android.graphics.Color.argb(
+                                    248,
+                                    247,
+                                    248,
+                                    250
+                                )
+                            )
+
+                            setStroke(
+                                dp(1),
+                                android.graphics.Color.argb(
+                                    110,
+                                    180,
+                                    185,
+                                    192
+                                )
+                            )
+
+                            cornerRadius =
+                                dp(14)
+                                    .toFloat()
+                        }
+
+                elevation =
+                    dp(8)
+                        .toFloat()
+
+                alpha =
+                    0f
+
+                scaleX =
+                    0.88f
+
+                scaleY =
+                    0.88f
+            }
+
+        val popupWidth =
+            dp(58)
+
+        val popupHeight =
+            dp(68)
+
+        val popup =
+            android.widget.PopupWindow(
+                preview,
+                popupWidth,
+                popupHeight,
+                false
+            ).apply {
+
+                isTouchable =
+                    false
+
+                isFocusable =
+                    false
+
+                isOutsideTouchable =
+                    false
+
+                isClippingEnabled =
+                    false
+
+                elevation =
+                    dp(6)
+                        .toFloat()
+            }
+
+        keyPreviewPopup =
+            popup
+
+        popup.showAsDropDown(
+            keyView,
+            (
+                keyView.width -
+                    popupWidth
+            ) / 2,
+            -(
+                keyView.height +
+                    popupHeight +
+                    dp(5)
+            )
+        )
+
+        preview
+            .animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(38L)
+            .setInterpolator(
+                android.view.animation
+                    .DecelerateInterpolator(
+                        1.7f
+                    )
+            )
+            .start()
+    }
+
+
+    private fun hideKeyPreview() {
+
+        keyPreviewPopup
+            ?.dismiss()
+
+        keyPreviewPopup =
+            null
+    }
+
+
+    // =========================================================
     // HAPTIC FEEDBACK
     // =========================================================
 
@@ -1988,7 +2164,18 @@ class LLMKeyboardService : InputMethodService() {
                      * Visual feedback and haptics follow immediately after,
                      * keeping touch-to-text latency as short as possible.
                      */
+                    val previewLabel =
+                        (touchedView as? Button)
+                            ?.text
+                            ?.toString()
+                            .orEmpty()
+
                     touchedView.callOnClick()
+
+                    showKeyPreview(
+                        touchedView,
+                        previewLabel
+                    )
 
                     /*
                      * Touch-position-aware physical key motion.
@@ -2052,6 +2239,8 @@ class LLMKeyboardService : InputMethodService() {
 
                 android.view.MotionEvent.ACTION_UP,
                 android.view.MotionEvent.ACTION_CANCEL -> {
+
+                    hideKeyPreview()
 
                     touchedView.isPressed = false
                     touchedView.jumpDrawablesToCurrentState()
