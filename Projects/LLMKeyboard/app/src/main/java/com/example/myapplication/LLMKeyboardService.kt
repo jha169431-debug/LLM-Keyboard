@@ -206,9 +206,9 @@ class LLMKeyboardService : InputMethodService() {
                     LinearLayout.HORIZONTAL
 
                 setPadding(
-                    dp(8),
+                    dp(5),
                     0,
-                    dp(8),
+                    dp(5),
                     0
                 )
 
@@ -242,7 +242,7 @@ class LLMKeyboardService : InputMethodService() {
                         false
 
                     textSize =
-                        15f
+                        16f
 
                     typeface =
                         android.graphics.Typeface.create(
@@ -281,14 +281,43 @@ class LLMKeyboardService : InputMethodService() {
                         0f
 
                     setPadding(
-                        dp(8),
+                        dp(5),
                         0,
-                        dp(8),
+                        dp(5),
                         0
                     )
 
                     isEnabled =
                         false
+
+                    setOnTouchListener { touchedView, event ->
+
+                        when (event.actionMasked) {
+
+                            android.view.MotionEvent.ACTION_DOWN -> {
+
+                                touchedView.animate().cancel()
+                                touchedView.animate()
+                                    .scaleX(0.96f)
+                                    .scaleY(0.96f)
+                                    .setDuration(25L)
+                                    .start()
+                            }
+
+                            android.view.MotionEvent.ACTION_UP,
+                            android.view.MotionEvent.ACTION_CANCEL -> {
+
+                                touchedView.animate().cancel()
+                                touchedView.animate()
+                                    .scaleX(1.0f)
+                                    .scaleY(1.0f)
+                                    .setDuration(60L)
+                                    .start()
+                            }
+                        }
+
+                        false
+                    }
 
                     setOnClickListener {
 
@@ -313,14 +342,14 @@ class LLMKeyboardService : InputMethodService() {
                 button,
                 LinearLayout.LayoutParams(
                     0,
-                    dp(38),
+                    dp(40),
                     1f
                 ).apply {
 
                     setMargins(
-                        dp(2),
+                        dp(1),
                         0,
-                        dp(2),
+                        dp(1),
                         0
                     )
                 }
@@ -1092,11 +1121,36 @@ class LLMKeyboardService : InputMethodService() {
                     prediction.isNotEmpty()
                 ) {
 
+                    val changed =
+                        button.text
+                            ?.toString() != prediction
+
                     button.text =
                         prediction
 
                     button.isEnabled =
                         true
+
+                    if (changed) {
+
+                        button.animate()
+                            .cancel()
+
+                        button.alpha =
+                            0.65f
+
+                        button.translationY =
+                            dp(2).toFloat()
+
+                        button.animate()
+                            .alpha(1f)
+                            .translationY(0f)
+                            .setDuration(90L)
+                            .setInterpolator(
+                                android.view.animation.DecelerateInterpolator()
+                            )
+                            .start()
+                    }
 
                     button.visibility =
                         View.VISIBLE
