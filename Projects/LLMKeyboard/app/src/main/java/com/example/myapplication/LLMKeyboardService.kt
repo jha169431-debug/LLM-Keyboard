@@ -1936,6 +1936,14 @@ class LLMKeyboardService : InputMethodService() {
                      */
                     touchedView.callOnClick()
 
+                    touchedView.animate().cancel()
+                    touchedView.animate()
+                        .scaleX(0.90f)
+                        .scaleY(0.90f)
+                        .alpha(0.78f)
+                        .setDuration(28L)
+                        .start()
+
                     touchedView.isPressed = true
                     touchedView.jumpDrawablesToCurrentState()
 
@@ -1951,6 +1959,13 @@ class LLMKeyboardService : InputMethodService() {
 
                     touchedView.isPressed = false
                     touchedView.jumpDrawablesToCurrentState()
+
+                    touchedView.animate()
+                        .scaleX(1.0f)
+                        .scaleY(1.0f)
+                        .alpha(1.0f)
+                        .setDuration(70L)
+                        .start()
 
                     true
                 }
