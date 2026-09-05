@@ -1929,14 +1929,19 @@ class LLMKeyboardService : InputMethodService() {
 
                 android.view.MotionEvent.ACTION_DOWN -> {
 
+                    /*
+                     * Commit the key action first.
+                     * Visual feedback and haptics follow immediately after,
+                     * keeping touch-to-text latency as short as possible.
+                     */
+                    touchedView.callOnClick()
+
                     touchedView.isPressed = true
                     touchedView.jumpDrawablesToCurrentState()
 
                     touchedView.performHapticFeedback(
                         android.view.HapticFeedbackConstants.VIRTUAL_KEY
                     )
-
-                    touchedView.callOnClick()
 
                     true
                 }
