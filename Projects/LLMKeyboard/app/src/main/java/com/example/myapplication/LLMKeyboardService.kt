@@ -183,7 +183,9 @@ class LLMKeyboardService : InputMethodService() {
             )
         )
 
+        keyboardRootView = root
         applyOptionalKeyboardTypeface(root)
+        applyVisualTheme(root)
 
         initializeLlmIfNeeded()
 
@@ -1969,21 +1971,158 @@ class LLMKeyboardService : InputMethodService() {
 
 
     // =========================================================
-    // OPTIONAL LOCAL KEYBOARD FONT
+    private var keyboardRootView: View? = null
+
+    override fun onStartInputView(
+        info: android.view.inputmethod.EditorInfo?,
+        restarting: Boolean
+    ) {
+        super.onStartInputView(info, restarting)
+
+        keyboardRootView?.let {
+            applyOptionalKeyboardTypeface(it)
+            applyVisualTheme(it)
+        }
+    }
+
+
+    // =========================================================
+    // VISUAL THEME ENGINE
+    // =========================================================
+
+    private fun applyVisualTheme(root: View) {
+        val selected = KeyboardThemeStore.current(this)
+        val theme = KeyboardVisualThemes.forTheme(selected)
+
+        android.util.Log.d(
+            "LLMTheme",
+            "Applying visual theme: ${selected.displayName}"
+        )
+
+        root.background =
+            android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                setColor(theme.surface)
+                cornerRadii = floatArrayOf(
+                    visualDp(18f), visualDp(18f),
+                    visualDp(18f), visualDp(18f),
+                    0f, 0f, 0f, 0f
+                )
+            }
+
+        applyVisualThemeRecursive(root, theme)
+    }
+
+    private fun applyVisualThemeRecursive(
+        view: View,
+        theme: KeyboardVisualTheme
+    ) {
+
+        if (view is android.widget.Button) {
+
+            val colors = when (view.id) {
+                R.id.key_enter ->
+                    theme.accent to theme.accentPressed
+
+                R.id.key_shift,
+                R.id.key_backspace,
+                R.id.key_symbols ->
+                    theme.action to theme.actionPressed
+
+                View.NO_ID ->
+                    theme.suggestion to theme.suggestionPressed
+
+                else ->
+                    theme.key to theme.keyPressed
+            }
+
+            view.backgroundTintList = null
+            view.background = createVisualKeyDrawable(
+                colors.first,
+                colors.second,
+                theme.radiusDp
+            )
+
+            view.setTextColor(
+                if (view.id == R.id.key_enter)
+                    theme.accentText
+                else
+                    theme.text
+            )
+        }
+
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                applyVisualThemeRecursive(
+                    view.getChildAt(index),
+                    theme
+                )
+            }
+        }
+    }
+
+    private fun createVisualKeyDrawable(
+        normalColor: Int,
+        pressedColor: Int,
+        radiusDp: Float
+    ): android.graphics.drawable.StateListDrawable {
+
+        fun make(color: Int) =
+            android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                cornerRadius = visualDp(radiusDp)
+                setColor(color)
+                setStroke(
+                    visualDp(0.5f).toInt().coerceAtLeast(1),
+                    android.graphics.Color.argb(45, 125, 135, 145)
+                )
+            }
+
+        return android.graphics.drawable.StateListDrawable().apply {
+            addState(
+                intArrayOf(android.R.attr.state_pressed),
+                make(pressedColor)
+            )
+            addState(
+                intArrayOf(),
+                make(normalColor)
+            )
+        }
+    }
+
+    private fun visualDp(value: Float): Float =
+        value * resources.displayMetrics.density
+
+
+    // =========================================================
+    // KEYBOARD THEME TYPOGRAPHY
     // =========================================================
 
     private fun optionalKeyboardTypeface():
         android.graphics.Typeface? {
 
+        val theme =
+            KeyboardThemeStore.current(this)
+
+        val fontName =
+            theme.fontResourceName
+                ?: return android.graphics.Typeface.create(
+                    "sans-serif",
+                    android.graphics.Typeface.NORMAL
+                )
+
         val fontId =
             resources.getIdentifier(
-                "misans_static",
+                fontName,
                 "font",
                 packageName
             )
 
         if (fontId == 0) {
-            return null
+            return android.graphics.Typeface.create(
+                "sans-serif",
+                android.graphics.Typeface.NORMAL
+            )
         }
 
         return try {
@@ -1992,15 +2131,20 @@ class LLMKeyboardService : InputMethodService() {
                 android.os.Build.VERSION.SDK_INT >=
                 android.os.Build.VERSION_CODES.O
             ) {
-                resources.getFont(
-                    fontId
-                )
+                resources.getFont(fontId)
             } else {
-                null
+                android.graphics.Typeface.create(
+                    "sans-serif",
+                    android.graphics.Typeface.NORMAL
+                )
             }
 
         } catch (_: Exception) {
-            null
+
+            android.graphics.Typeface.create(
+                "sans-serif",
+                android.graphics.Typeface.NORMAL
+            )
         }
     }
 
@@ -2026,8 +2170,7 @@ class LLMKeyboardService : InputMethodService() {
     ) {
 
         if (root is android.widget.Button) {
-            root.typeface =
-                typeface
+            root.typeface = typeface
         }
 
         if (root is ViewGroup) {
@@ -2045,7 +2188,6 @@ class LLMKeyboardService : InputMethodService() {
     }
 
 
-    // =========================================================
     // KEY PREVIEW POPUP
     // =========================================================
 
